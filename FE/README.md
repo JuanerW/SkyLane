@@ -30,8 +30,9 @@ npx create-next-app@14 . --ts --tailwind --app --src-dir --eslint
 
 | 成员 | 负责 |
 |---|---|
-| Zhiyuan Wang | 项目骨架；`lib/api.ts`、`lib/sse.ts`、`lib/time.ts`；类型生成；AppShell 和登录守卫；`/login`；`/orders`；`/orders/[id]/track`（SSE、时间线、评价）。第二轮：`/account` |
+| Zhiyuan Wang | 项目骨架；`lib/api.ts`、`lib/sse.ts`、`lib/time.ts`；类型生成；AppShell 和登录守卫；`/orders`；`/orders/[id]/track`（状态时间线、评价）；前端协调。第二轮：`/account` |
 | Pei Li | `/ship`（表单、Photon 地址补全、寄件草稿）；`/ship/plans`（方案卡片、下单）；地图组件 `components/map/`（站点、路线、机器人沿路移动、无人机弧线），追踪页复用 |
+| Yuning Cao（后端，兼做） | `/login` 页面和登录状态保存（账号模块前后端一人负责） |
 
 ## 约定
 
