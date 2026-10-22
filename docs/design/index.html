@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>SkyLane 设计总览</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap">
+<style>
+/* Layout: 左侧目录（宽屏吸顶）+ 右侧正文；窄屏目录在上。配色与三张结构图一致 */
+:root {
+  --paper: #f5f5f5; --panel: #fbfbfb; --ink: #2d3142; --muted: #4f5d75; --soft: #5a6580;
+  --rule: rgba(45,49,66,0.12); --accent: #bf4520; --accent-tint: rgba(191,69,32,0.08); --link: #2e5aa8; --code-bg: #ececec;
+  --sans: "IBM Plex Sans", "Noto Sans SC", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #2d3142; --panel: #333849; --ink: #f5f5f5; --muted: #bfc0c0; --soft: #949eb2;
+  --rule: rgba(245,245,245,0.12); --accent: #f08a59; --accent-tint: rgba(240,138,89,0.12); --link: #739fdf; --code-bg: #393e53; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #2d3142; --panel: #333849; --ink: #f5f5f5; --muted: #bfc0c0; --soft: #949eb2;
+  --rule: rgba(245,245,245,0.12); --accent: #f08a59; --accent-tint: rgba(240,138,89,0.12); --link: #739fdf; --code-bg: #393e53; color-scheme: dark }
+* { box-sizing: border-box }
+html { scroll-behavior: smooth }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto } * { transition: none !important } }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px }
+.layout { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; align-items: start }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 20px } }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); display: grid; gap: 4px; font-size: 13.5px }
+@media (max-width: 900px) { nav.toc { position: static; display: flex; flex-wrap: wrap; gap: 6px 14px } }
+nav.toc .eyebrow { margin-bottom: 6px }
+@media (max-width: 900px) { nav.toc .eyebrow { width: 100%; margin: 0 } }
+nav.toc a { color: var(--muted); text-decoration: none; padding: 2px 0 }
+nav.toc a:hover { color: var(--accent) }
+nav.toc a:focus-visible { outline: 2px solid var(--link); outline-offset: 2px }
+main { display: grid; gap: 44px; min-width: 0 }
+section { display: grid; gap: 14px; min-width: 0; scroll-margin-top: 20px }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--soft) }
+h1 { margin: 4px 0 0; font-size: 30px; font-weight: 600; text-wrap: balance; line-height: 1.25 }
+h2 { margin: 0; font-size: 21px; font-weight: 600; text-wrap: balance; padding-bottom: 6px; border-bottom: 1px solid var(--rule) }
+h2 .n { font-family: var(--mono); font-size: 14px; color: var(--accent); margin-right: 8px }
+h3 { margin: 8px 0 0; font-size: 16px; font-weight: 600 }
+p { margin: 0; max-width: 72ch }
+.muted { color: var(--muted) }
+ul, ol { margin: 0; padding-left: 22px; display: grid; gap: 4px; max-width: 76ch }
+a { color: var(--link) }
+code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px }
+pre { margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.6 }
+pre code { background: none; padding: 0 }
+.tw { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 720px }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top }
+th { color: var(--soft); font-weight: 500; font-size: 12.5px; white-space: nowrap }
+tr:last-child td { border-bottom: 0 }
+td code { white-space: nowrap }
+td.k { font-family: var(--mono); font-size: 12.5px; color: var(--soft); width: 36px }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 12px }
+a.card { display: grid; gap: 4px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; color: inherit; text-decoration: none; transition: border-color .12s, background .12s }
+a.card:hover { border-color: var(--accent); background: var(--accent-tint) }
+a.card:focus-visible { outline: 2px solid var(--link); outline-offset: 3px }
+a.card b { font-weight: 600 }
+a.card span { color: var(--muted); font-size: 13.5px }
+.flow { font-family: var(--mono); font-size: 13px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 16px; overflow-x: auto; white-space: pre }
+.verb { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--link); color: var(--panel); white-space: nowrap }
+.verb.sse { background: var(--accent) }
+.pill { font-family: var(--mono); font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--rule); color: var(--muted); white-space: nowrap }
+.note { border-left: 3px solid var(--accent); background: var(--accent-tint); padding: 10px 14px; border-radius: 0 8px 8px 0; max-width: 80ch }
+</style>
+
+<div class="layout">
+  <nav class="toc" aria-label="目录">
+    <span class="eyebrow">目录</span>
+    <a href="#overview">1 概述</a>
+    <a href="#decisions">2 关键设计决定</a>
+    <a href="#frontend">3 前端</a>
+    <a href="#backend">4 后端</a>
+    <a href="#database">5 数据库</a>
+    <a href="#thirdparty">6 第三方 API</a>
+    <a href="#later">7 后续阶段</a>
+  </nav>
+
+  <main>
+    <header style="display:grid;gap:10px">
+      <span class="eyebrow">SkyLane · MVP 技术设计 · 2026-10-21</span>
+      <h1>SkyLane 设计总览</h1>
+      <p class="muted">旧金山同城配送：3 个站点，地面机器人和无人机两种运力。本页是 MVP 的完整设计，前端、后端、数据库和第三方服务都以这里为准。三张可点击的结构图用来查细节。</p>
+      <div class="cards">
+        <a class="card" href="frontend.html"><b>前端结构图 →</b><span>页面、Hook、API 层、调用关系</span></a>
+        <a class="card" href="backend.html"><b>后端结构图 →</b><span>Controller、Service、Repository、方法签名</span></a>
+        <a class="card" href="database.html"><b>数据库结构图 →</b><span>ER 图、字段、约束、改动记录</span></a>
+      </div>
+    </header>
+
+    <!-- 1 概述 -->
+    <section id="overview">
+      <h2><span class="n">1</span>概述</h2>
+      <h3>MVP 做什么</h3>
+      <ul>
+        <li><b>账号系统</b>：邮箱注册、邮箱登录、Google 登录、查看和修改资料、修改密码、退出登录。</li>
+        <li><b>新建订单</b>：填物品、重量、取件和收件地址、收件人、备注、送达时限。</li>
+        <li><b>比较方案并下单</b>：6 个方案（3 站点 × 2 设备），显示出发时间、到达时间、估算价格、路线。选中即下单，不付款。</li>
+        <li><b>实时追踪</b>：地图上看设备移动、进度、剩余时间；到达后自动完成。</li>
+        <li><b>取消</b>：设备出发前可以取消。</li>
+        <li><b>评价</b>：完成后 1–5 星加评论。</li>
+        <li><b>订单历史</b>：My Orders 列表和详情。</li>
+      </ul>
+      <h3>MVP 不做</h3>
+      <p>支付和 Checkout 页、重置密码、短信通知、收件人免登录追踪链接、Smart Recommendation、Agent Mode。</p>
+      <h3>用户主流程</h3>
+      <div class="flow">/login ─▶ /ship（填写）─▶ /ship/plans（比较并下单）─▶ /orders/[id]/track（追踪）─▶ 完成后评价
+顶部导航：New Delivery · My Orders · Account</div>
+    </section>
+
+    <!-- 2 决定 -->
+    <section id="decisions">
+      <h2><span class="n">2</span>关键设计决定</h2>
+      <p>下面是对照前端、后端、数据库后找出的不一致和容易出错的地方，每条都给了结论。实现时以此为准，有异议在这里改。</p>
+      <h3>账号与安全</h3>
+      <div class="tw"><table>
+        <thead><tr><th>#</th><th>问题</th><th>决定</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td class="k">D1</td><td>需要账号系统，但不要重置密码</td><td>做 Account 页：查看邮箱、修改显示名、修改密码、退出登录。不做忘记密码和邮件。</td><td>重置密码需要发邮件服务，MVP 没有。</td></tr>
+          <tr><td class="k">D2</td><td>JWT 无状态，改密码后旧 token 仍有效</td><td><code>app_user.token_version</code> 写进 JWT；改密码时加 1，过滤器发现版本不符就返回 401。改密码接口返回新 token。</td><td>不引入 Redis 黑名单也能让旧登录失效。</td></tr>
+          <tr><td class="k">D3</td><td>同一邮箱既用密码注册又用 Google 登录</td><td>一个用户可以同时有密码和 Google 身份。Google 登录时若 <code>email_verified</code> 且邮箱已存在，就绑定到这个账号（写入 <code>google_sub</code>）。</td><td>避免同一个人有两个账号、两份订单历史。</td></tr>
+          <tr><td class="k">D4</td><td>只用 Google 登录的用户能否改密码</td><td>不显示修改密码。后端返回 409 <code>NO_PASSWORD</code>。</td><td>没有旧密码可以校验。</td></tr>
+          <tr><td class="k">D5</td><td>token 放哪里</td><td>localStorage + <code>Authorization: Bearer</code>，有效期 7 天。不用 Cookie。</td><td>前后端分开部署、跨域，Bearer 最简单；SSE 也用 fetch 带头。前端不用 <code>dangerouslySetInnerHTML</code>，降低 XSS 风险。</td></tr>
+          <tr><td class="k">D6</td><td>密码哈希算法</td><td>Spring Security 自带的 BCrypt，密码至少 8 位。</td><td>不用额外依赖。</td></tr>
+        </tbody>
+      </table></div>
+      <h3>下单与排队</h3>
+      <div class="tw"><table>
+        <thead><tr><th>#</th><th>问题</th><th>决定</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td class="k">D7</td><td>不做 Checkout，价格还要不要</td><td>只显示估算价，用来比较方案和打 cheapest 标签。选中方案后，底部确认条直接 Place order。</td><td>价格无所谓，但方案比较需要一个维度。</td></tr>
+          <tr><td class="k">D8</td><td>定价公式</td><td>重量 kg × 取件到收件的英里数 × $1，最低 $1，四舍五入到美分。机器人用路网距离，无人机用直线距离。</td><td>简单、可配置。</td></tr>
+          <tr><td class="k">D9</td><td>设备随时可接单，报价后到下单前别人先下了单</td><td>下单时重新计算出发时间。比报价时晚 5 分钟以内照常下单；晚更多返回 409 <code>QUOTE_STALE</code>，前端自动重新报价并提示。</td><td>设备能排队，所以几乎不会“没车”；但用户看到的时间不能悄悄变很多。</td></tr>
+          <tr><td class="k">D10</td><td>送达时限放前端算还是后端算</td><td>前端只传 <code>arrive_within_minutes</code>（空 = ASAP，或 30 / 60 / 120），后端用服务器时间算截止时间。报价和下单都校验，赶不上返回 <code>DEADLINE_MISSED</code>。</td><td>不受用户电脑时钟影响。</td></tr>
+          <tr><td class="k">D11</td><td>取消和出发同时发生</td><td>取消用条件更新：<code>WHERE status = 'confirmed' AND departs_at &gt; now()</code>，影响 0 行就返回 409 <code>NOT_CANCELLABLE</code>。模拟器出发也用条件更新。</td><td>数据库保证两者只有一个成功。</td></tr>
+          <tr><td class="k">D12</td><td>取消后，排在后面的订单要不要提前</td><td>不提前。</td><td>用户已经看到的出发和到达时间不会变，逻辑也简单。</td></tr>
+          <tr><td class="k">D13</td><td>重复点击下单</td><td>前端选中方案时生成 <code>Idempotency-Key</code>，重试复用；数据库 <code>UNIQUE (user_id, idempotency_key)</code>。</td><td>网络重试不会生成两单。</td></tr>
+          <tr><td class="k">D14</td><td>订单号</td><td>直接用 UUID，页面显示前 8 位，点击复制完整 ID。</td><td>不需要额外的序列和字段。</td></tr>
+        </tbody>
+      </table></div>
+      <h3>路线、追踪与数据</h3>
+      <div class="tw"><table>
+        <thead><tr><th>#</th><th>问题</th><th>决定</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td class="k">D15</td><td>实时位置存不存库</td><td>不存。位置由路线、出发时间、速度实时算出；只把状态变化写进 <code>order_event</code>。</td><td>省掉每秒写库，重连和重启后位置自然正确。</td></tr>
+          <tr><td class="k">D16</td><td>追踪用 SSE 还是轮询</td><td>SSE。每秒推一次位置，15 秒一次心跳；断线后前端带 <code>Last-Event-ID</code> 重连，后端补发错过的状态。订单到终态后关流。</td><td>团队原方案就是 REST + SSE。</td></tr>
+          <tr><td class="k">D17</td><td>还没出发的预约单打开追踪页</td><td>显示 Scheduled、出发倒计时和取消按钮；出发后切换成地图追踪。</td><td>排队订单很常见。</td></tr>
+          <tr><td class="k">D18</td><td>无人机怎么画</td><td>后端只算时间（起飞 1 分钟 + 直线距离 ÷ 15 m/s + 降落 1 分钟），推进度和剩余秒数。前端画弧线、放图标、显示倒计时。</td><td>空中不需要路网。</td></tr>
+          <tr><td class="k">D19</td><td>机器人陡坡怎么判断</td><td>MVP 写死几个陡坡区域多边形（Twin Peaks、Nob Hill、Russian Hill、Telegraph Hill），路线穿过就不可用。</td><td>不依赖海拔 API，结果稳定、可测试。</td></tr>
+          <tr><td class="k">D20</td><td>风速</td><td>MVP 不考虑。</td><td>减少外部依赖。</td></tr>
+          <tr><td class="k">D21</td><td>单位</td><td>后端内部用米、秒、美分；API 返回 <code>distance_m</code>、<code>price_cents</code>；前端显示英里和美元。</td><td>避免前后端各自换算出错。</td></tr>
+          <tr><td class="k">D22</td><td>时间和时区</td><td>数据库 <code>timestamptz</code> 按 UTC；API 用 ISO 8601 带 <code>Z</code>；前端统一按 America/Los_Angeles 显示。</td><td>只在显示时转换一次。</td></tr>
+          <tr><td class="k">D23</td><td>服务范围</td><td>旧金山范围：纬度 37.70–37.84，经度 −122.52 到 −122.35。超出返回 400 <code>OUT_OF_SERVICE_AREA</code>；前端 Photon 用同一范围。</td><td>前后端用同一组数字。</td></tr>
+          <tr><td class="k">D24</td><td>模拟器和多实例</td><td>后端只部署 1 个实例。以后扩容时给定时任务加 ShedLock。</td><td>多实例会重复推进状态。</td></tr>
+          <tr><td class="k">D25</td><td>前后端字段对不上</td><td>后端用 springdoc 生成 OpenAPI，前端用 openapi-typescript 生成类型。改接口必须先改后端 DTO。</td><td>契约只有一个来源。</td></tr>
+          <tr><td class="k">D26</td><td>数据库结构谁说了算</td><td>Flyway 迁移脚本，<code>ddl-auto</code> 设为 <code>validate</code>。</td><td>Staybooking 用的 <code>create-drop</code> 每次启动都会清库。</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- 3 前端 -->
+    <section id="frontend">
+      <h2><span class="n">3</span>前端</h2>
+      <h3>技术栈</h3>
+      <p>Next.js 14（App Router）+ TypeScript；TanStack Query 管请求和缓存；React Hook Form + Zod 做表单校验；MapLibre GL JS 画地图；Tailwind CSS。</p>
+      <h3>页面</h3>
+      <div class="tw"><table>
+        <thead><tr><th>路由</th><th>设计稿</th><th>主要内容</th><th>调用接口</th></tr></thead>
+        <tbody>
+          <tr><td><code>/login</code></td><td>F · Sign In</td><td>登录 / 注册切换、Google 按钮。没有忘记密码。</td><td><code>/auth/register</code> <code>/auth/login</code> <code>/auth/google</code></td></tr>
+          <tr><td><code>/ship</code></td><td>A · New Delivery</td><td>物品描述、重量 kg（≤ 10）、易碎；取件和收件地址（Photon 补全）；收件人姓名和电话；备注；Arrive within；最近 3 单。</td><td>Photon、<code>GET /orders?limit=100</code>（取前 3 条，与 My Orders 共用缓存）</td></tr>
+          <tr><td><code>/ship/plans</code></td><td>B · Compare Plans</td><td>地图和路线；6 张方案卡片（出发 Now 或 Next free、到达时间、价格、距离、不可用原因）；Optimize for 和 Vehicle 过滤；底部确认条 Place order。</td><td><code>POST /quotes</code> <code>POST /orders</code></td></tr>
+          <tr><td><code>/orders/[id]/track</code></td><td>D · Live Tracking</td><td>出发前：倒计时和取消。出发后：地图、阶段、剩余时间、时间线。完成后：评价表单。</td><td><code>GET /orders/{id}</code> SSE <code>/track</code> <code>/cancel</code> <code>/review</code></td></tr>
+          <tr><td><code>/orders</code></td><td>E · My Orders</td><td>状态 tab、搜索（订单号前 8 位或收件人）、按日期排序、详情抽屉。</td><td><code>GET /orders?limit=100</code> <code>/cancel</code> <code>/review</code></td></tr>
+          <tr><td><code>/account</code></td><td>Account Settings</td><td>邮箱（只读）、显示名、登录方式、修改密码（只对有密码的账号显示）、退出登录。</td><td><code>GET /me</code> <code>PATCH /me</code> <code>PUT /me/password</code></td></tr>
+        </tbody>
+      </table></div>
+      <h3>数据层</h3>
+      <ul>
+        <li><code>lib/api.ts</code>：所有 REST 请求的出口，加 Bearer 头，把错误体转成 <code>ApiError(code)</code>；收到 401 清 token 并跳 <code>/login</code>。</li>
+        <li><code>lib/sse.ts</code>：用 fetch + ReadableStream 读 SSE，记录最后一个事件 id，断线按 1 / 2 / 4 秒退避重连。</li>
+        <li><code>lib/photon.ts</code>：地址补全，≥ 3 个字符、防抖 300 ms，限定旧金山范围；注意 GeoJSON 坐标顺序是 [lng, lat]。</li>
+        <li><code>lib/time.ts</code>：统一按美西时间格式化。</li>
+        <li>Hooks：<code>useAuth</code>、<code>useShipmentDraft</code>、<code>useQuote</code>、<code>useCreateOrder</code>、<code>useOrders</code>、<code>useTrackingStream</code>、<code>useReview</code>、<code>useAddressSearch</code>。</li>
+        <li>寄件草稿（表单、quote_id、option_id、idempotency_key）存 sessionStorage，两个 ship 页面共用，下单成功后清空。</li>
+      </ul>
+      <h3>错误码在页面上怎么处理</h3>
+      <div class="tw"><table>
+        <thead><tr><th>错误码</th><th>页面</th><th>处理</th></tr></thead>
+        <tbody>
+          <tr><td><code>INVALID_CREDENTIALS</code> <code>EMAIL_TAKEN</code></td><td>/login、/account</td><td>表单内提示</td></tr>
+          <tr><td><code>OUT_OF_SERVICE_AREA</code></td><td>/ship</td><td>地址字段标红：Only addresses in San Francisco</td></tr>
+          <tr><td><code>QUOTE_EXPIRED</code> <code>QUOTE_STALE</code></td><td>/ship/plans</td><td>提示 Options updated，自动重新报价</td></tr>
+          <tr><td><code>DEADLINE_MISSED</code> <code>DEVICE_UNAVAILABLE</code></td><td>/ship/plans</td><td>该卡片变灰，提示原因</td></tr>
+          <tr><td><code>NOT_CANCELLABLE</code></td><td>/orders、追踪页</td><td>提示 Already departed，刷新订单</td></tr>
+          <tr><td><code>NO_PASSWORD</code></td><td>/account</td><td>不显示修改密码（正常不会触发）</td></tr>
+        </tbody>
+      </table></div>
+      <h3>与 UI 设计稿的有意差异</h3>
+      <p>UI 设计稿《Dispatch &amp; Delivery Management》比 MVP 多一些内容。实现时按下表调整，其余照设计稿做。</p>
+      <div class="tw"><table>
+        <thead><tr><th>设计稿</th><th>MVP 做法</th></tr></thead>
+        <tbody>
+          <tr><td>Jinshan City 和示意地图</td><td>真实旧金山地图（MapLibre + OpenFreeMap）</td></tr>
+          <tr><td>C · Checkout（Stripe 付款、价格明细、短信）</td><td>不做；在 Compare Plans 底部确认条直接 Place order</td></tr>
+          <tr><td>Sign In 的 Forgot password</td><td>不做，隐藏入口</td></tr>
+          <tr><td>Account 的 Company、Phone、默认地址、通知、付款方式</td><td>只保留邮箱、显示名、修改密码、退出</td></tr>
+          <tr><td>New Delivery 的 Size、Special handling、Pickup notes、Delivery time</td><td>去掉 Size 和 Special handling（保留 Fragile）；合并为一个 Notes；Delivery time 统一为 Arrive within</td></tr>
+          <tr><td>按产品命名的方案（Robot Standard 等）</td><td>6 个方案按设备类型分组，站点作副标题</td></tr>
+          <tr><td>订单号 DD-20431</td><td>UUID 前 8 位</td></tr>
+          <tr><td>Tracking 的 Confirm receipt</td><td>到达后自动完成，只显示评价</td></tr>
+          <tr><td>AI 对话填表、AI 推荐横幅</td><td>后续阶段，MVP 隐藏</td></tr>
+        </tbody>
+      </table></div>
+      <h3>目录结构</h3>
+<pre>skylane-fe/src/
+├─ app/(auth)/login/page.tsx
+├─ app/(app)/layout.tsx              # AppShell：顶部导航 + 登录守卫
+├─ app/(app)/ship/page.tsx
+├─ app/(app)/ship/plans/page.tsx
+├─ app/(app)/orders/page.tsx
+├─ app/(app)/orders/[id]/track/page.tsx
+├─ app/(app)/account/page.tsx
+├─ components/{ui,shell,ship,plans,tracking,orders,account,map}/
+├─ hooks/
+├─ lib/{api,sse,photon,time}.ts
+└─ types/api.ts                      # openapi-typescript 生成，不手改</pre>
+    </section>
+
+    <!-- 4 后端 -->
+    <section id="backend">
+      <h2><span class="n">4</span>后端</h2>
+      <h3>技术栈</h3>
+      <p>Java 21、Spring Boot 3.3：Spring Web、Spring Security、Spring Data JPA + Hibernate Spatial、Flyway、springdoc-openapi；PostgreSQL 16 + PostGIS；JWT 用 jjwt；Google 登录校验用 google-api-client。分层沿用 Twitch / Staybooking：Controller → Service → Repository。</p>
+      <h3>包结构</h3>
+<pre>com.laioffer.skylane
+├─ SkyLaneApplication, AppConfig（声明 SecurityFilterChain、PasswordEncoder）,
+│  GlobalControllerExceptionHandler, DevRunner（种子数据）
+├─ user/        AuthController（/auth/**、/me）, UserService, GoogleTokenVerifier
+├─ quote/       QuoteController, QuoteService（含定价）, RouteService（含陡坡判断）
+├─ order/       OrderController, OrderService, OrderStateMachine
+├─ tracking/    TrackingController, TrackingService（含位置计算）, TrackingEventBus
+├─ review/      ReviewController, ReviewService
+├─ device/      DeviceSimulator（@Scheduled）
+├─ security/    JwtAuthFilter, JwtService
+└─ repository/  UserRepository, DeviceRepository, QuoteRepository, OrderRepository,
+                DeviceBlockRepository, OrderEventRepository, ReviewRepository</pre>
+      <p class="muted">类名与<a href="backend.html">后端结构图</a>一一对应。</p>
+      <h3>接口</h3>
+      <p class="muted">前缀 <code>/api/v1</code>。除 <code>/auth/**</code> 外都需要登录。字段统一 snake_case。</p>
+      <div class="tw"><table>
+        <thead><tr><th>方法</th><th>路径</th><th>请求</th><th>响应</th><th>错误</th></tr></thead>
+        <tbody>
+          <tr><td><span class="verb">POST</span></td><td><code>/auth/register</code></td><td>email, password（≥ 8）, display_name</td><td>201 access_token, user</td><td><code>EMAIL_TAKEN</code></td></tr>
+          <tr><td><span class="verb">POST</span></td><td><code>/auth/login</code></td><td>email, password</td><td>200 access_token, user</td><td><code>INVALID_CREDENTIALS</code></td></tr>
+          <tr><td><span class="verb">POST</span></td><td><code>/auth/google</code></td><td>id_token</td><td>200 access_token, user</td><td><code>INVALID_GOOGLE_TOKEN</code></td></tr>
+          <tr><td><span class="verb">GET</span></td><td><code>/me</code></td><td>—</td><td>id, email, display_name, has_password, google_linked, created_at</td><td>401</td></tr>
+          <tr><td><span class="verb">PATCH</span></td><td><code>/me</code></td><td>display_name</td><td>200 同上</td><td><code>VALIDATION_ERROR</code></td></tr>
+          <tr><td><span class="verb">PUT</span></td><td><code>/me/password</code></td><td>current_password, new_password</td><td>200 新 access_token</td><td><code>INVALID_CREDENTIALS</code> <code>NO_PASSWORD</code></td></tr>
+          <tr><td><span class="verb">GET</span></td><td><code>/stations</code></td><td>—</td><td>[id, code, name, lat, lng]</td><td>—</td></tr>
+          <tr><td><span class="verb">POST</span></td><td><code>/quotes</code></td><td>item{description, fragile}, weight_kg, pickup{text, lat, lng}, dropoff{…}, notes?, arrive_within_minutes?</td><td>201 quote_id, expires_at, options[6]{option_id, station, device_type, available, unavailable_reason, departs_at, eta_at, price_cents, distance_m, route_points, tags}</td><td><code>OUT_OF_SERVICE_AREA</code> <code>SAME_ADDRESS</code></td></tr>
+          <tr><td><span class="verb">POST</span></td><td><code>/orders</code></td><td>quote_id, option_id, recipient{name, phone}；头 Idempotency-Key</td><td>201 order_id, status, device, price_cents, departs_at, eta_at</td><td><code>QUOTE_EXPIRED</code> <code>QUOTE_STALE</code> <code>DEADLINE_MISSED</code> <code>DEVICE_UNAVAILABLE</code> <code>OPTION_NOT_FOUND</code></td></tr>
+          <tr><td><span class="verb">GET</span></td><td><code>/orders?limit=100</code></td><td>—</td><td>[order_id, status, device_type, price_cents, created_at, departs_at, eta_at, completed_at, pickup_text, dropoff_text, recipient_name, reviewed]</td><td>—</td></tr>
+          <tr><td><span class="verb">GET</span></td><td><code>/orders/{id}</code></td><td>—</td><td>订单全部字段 + route_points + cancellable + timeline[] + review</td><td><code>ORDER_NOT_FOUND</code></td></tr>
+          <tr><td><span class="verb">POST</span></td><td><code>/orders/{id}/cancel</code></td><td>reason?</td><td>200 status = canceled</td><td><code>NOT_CANCELLABLE</code></td></tr>
+          <tr><td><span class="verb sse">SSE</span></td><td><code>/orders/{id}/track</code></td><td>头 Last-Event-ID（重连时）</td><td><code>status</code> {status, at}（带 id）；<code>position</code> {lat, lng, progress, remaining_s}</td><td><code>ORDER_NOT_FOUND</code></td></tr>
+          <tr><td><span class="verb">POST</span></td><td><code>/orders/{id}/review</code></td><td>rating 1–5, comment?</td><td>201 rating, comment</td><td><code>NOT_COMPLETED</code> <code>ALREADY_REVIEWED</code></td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted">错误体统一为 <code>{"error": {"code", "message", "details"}}</code>。状态码：400 校验，401 未登录，404 不存在或不属于当前用户，409 业务冲突。</p>
+
+      <h3>报价</h3>
+      <ol>
+        <li>校验两个地址都在服务范围内且不相同；截止时间 = 现在 + arrive_within_minutes（为空则无截止）。</li>
+        <li>对“活跃站点 × 设备类型”的每个组合（MVP 6 个）：
+          <ul>
+            <li>路线：机器人调 RouteService 走路网；无人机算直线。</li>
+            <li>硬约束：<code>OVERWEIGHT</code>（无人机 &gt; 2 kg，机器人 &gt; 10 kg）、<code>STEEP_TERRAIN</code>、<code>OUT_OF_RANGE</code>（无人机往返 &gt; 15 km）。命中则价格和时间为空。</li>
+            <li>出发时间 = max(现在, 该站该类设备最早空闲时间)；没有 active 设备则 <code>NO_DEVICE_AVAILABLE</code>。</li>
+            <li>到达时间 = 出发 + 行驶时间 + 装卸；晚于截止时间则 <code>DEADLINE_MISSED</code>。</li>
+            <li>价格按 D8。</li>
+          </ul></li>
+        <li>可用方案里打 <code>fastest</code>、<code>cheapest</code>、<code>recommended</code>（到达时间和价格归一化后按 0.6 : 0.4 加权最低）。</li>
+        <li>保存 quote 和 6 条 quote_option，有效期 10 分钟。</li>
+      </ol>
+      <h3>下单（一个事务）</h3>
+      <ol>
+        <li>Idempotency-Key 已存在 → 返回原订单。</li>
+        <li>校验报价未过期、属于当前用户、方案属于该报价且可用。</li>
+        <li>锁定该站该类 active 设备（<code>FOR UPDATE SKIP LOCKED</code>），选最早空闲的一台，出发时间 = max(现在, 它最后一段占用的结束时间)。</li>
+        <li>出发时间比报价晚 5 分钟以上 → <code>QUOTE_STALE</code>；到达晚于截止 → <code>DEADLINE_MISSED</code>。</li>
+        <li>插入两段占用 <code>device_block</code>：order（出发到送达）和 return（返航）。违反排斥约束就换下一台。</li>
+        <li>插入 delivery_order（地址、价格、备注、路线都做快照）、order_item、第一条 order_event（confirmed）。</li>
+      </ol>
+      <h3>订单状态</h3>
+      <div class="flow">confirmed ─▶ dispatched ─▶ picked_up ─▶ in_transit ─▶ arrived ─▶ completed
+confirmed（出发前）─▶ canceled          任何非终态 ─▶ failed</div>
+      <p>所有状态变化只经过 <code>OrderStateMachine.transition()</code>：同一事务更新 <code>delivery_order.status</code>、追加 <code>order_event</code>，提交后推给 TrackingEventBus。取消时释放该订单的两段占用。</p>
+      <h3>设备模拟器</h3>
+      <p><code>@Scheduled(fixedRate = 1000)</code> 每秒扫描进行中的订单，按时间推进状态：到 departs_at → dispatched；到达取件点 → picked_up，停留 1 分钟后 → in_transit；到达收件点 → arrived，30 秒后 → completed。速度：机器人 1.5 m/s，无人机 15 m/s。所有时长除以 <code>skylane.sim.speed</code>，演示时设成 10。</p>
+      <h3>追踪</h3>
+      <p>连接时：校验订单归属 → 按 Last-Event-ID 补发状态事件 → 推一次当前位置 → 注册到 TrackingEventBus。之后每秒由模拟器推位置。TrackingService 根据 route_points、departs_at 和速度算出位置、进度和剩余秒数。SseEmitter 超时 30 分钟，15 秒心跳，终态后关流。</p>
+      <h3>安全</h3>
+      <ul>
+        <li>SecurityFilterChain：无状态、关闭 CSRF、CORS 只允许前端域名；<code>/api/v1/auth/**</code> 放行，其余要求登录。</li>
+        <li>JwtAuthFilter：解析 Bearer，校验签名、过期时间和 token_version，把 userId 放进 SecurityContext。Controller 用 <code>@AuthenticationPrincipal</code> 取当前用户。</li>
+        <li>所有订单查询都带 user_id 条件，别人的订单返回 404。</li>
+      </ul>
+      <h3>配置</h3>
+<pre>skylane:
+  jwt: { secret: ${JWT_SECRET}, ttl-days: 7 }
+  google: { client-id: ${GOOGLE_CLIENT_ID} }
+  cors: { allowed-origins: ${FRONTEND_ORIGIN} }
+  routing: { provider: ors, ors-api-key: ${ORS_API_KEY}, osrm-base-url: ${OSRM_URL:} }
+  pricing: { usd-per-kg-mile: 1.00, min-cents: 100 }
+  quote: { ttl-minutes: 10, stale-tolerance-minutes: 5 }
+  service-area: { min-lat: 37.70, max-lat: 37.84, min-lng: -122.52, max-lng: -122.35 }
+  sim: { speed: 1.0 }
+spring.jpa.hibernate.ddl-auto: validate</pre>
+      <h3>演示数据（DevRunner，仅 dev）</h3>
+      <p>3 个站点（SoMa、Mission、Marina），每站 3 台机器人 + 2 架无人机；2 个测试账号，各有 3 笔已完成订单，其中 1 笔已评价。</p>
+    </section>
+
+    <!-- 5 数据库 -->
+    <section id="database">
+      <h2><span class="n">5</span>数据库</h2>
+      <p>PostgreSQL 16 + PostGIS，MVP 共 11 张表。主键 UUID（order_event 用自增 bigint）；时间 <code>timestamptz</code>；坐标 <code>geography(Point, 4326)</code>；金额整数美分。</p>
+      <div class="tw"><table>
+        <thead><tr><th>表</th><th>主要字段</th><th>约束 / 说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>app_user</code></td><td>id, email, display_name, google_sub, token_version, created_at, updated_at, disabled_at</td><td>email citext UNIQUE；google_sub 可空、UNIQUE；token_version 默认 0</td></tr>
+          <tr><td><code>user_credential</code></td><td>user_id, password_hash, updated_at</td><td>PK = FK → app_user；只用 Google 的用户没有这一行</td></tr>
+          <tr><td><code>station</code></td><td>id, code, name, address_text, location, is_active</td><td>code UNIQUE；location GiST 索引</td></tr>
+          <tr><td><code>device</code></td><td>id, code, station_id, device_type, status, battery_pct, location, last_seen_at</td><td>code UNIQUE（如 R-114）；battery 仅展示</td></tr>
+          <tr><td><code>quote</code></td><td>id, user_id, item_description, is_fragile, weight_kg, notes, pickup/dropoff text 与 location, deadline_at, expires_at</td><td>weight_kg 0–10；notes ≤ 500 字；只追加不修改</td></tr>
+          <tr><td><code>quote_option</code></td><td>id, quote_id, station_id, device_type, available, unavailable_reason, departs_at, eta_at, price_cents, distance_m, route_points, tags</td><td>UNIQUE (quote_id, id)；route_points 为 [[lat, lng], …] 的 jsonb</td></tr>
+          <tr><td><code>delivery_order</code></td><td>id, user_id, quote_id, option_id, device_id, device_type, status, recipient_name, recipient_phone, price_cents, notes, 地址快照, route_points, departs_at, eta_at, idempotency_key, confirmed/completed/canceled_at, cancel_reason</td><td>(quote_id, option_id) → quote_option；UNIQUE (user_id, idempotency_key)；status CHECK；索引 (user_id, created_at DESC)、(status)</td></tr>
+          <tr><td><code>order_item</code></td><td>id, order_id, description, is_fragile, weight_kg</td><td>order_id UNIQUE（每单一件）</td></tr>
+          <tr><td><code>device_block</code></td><td>id, device_id, order_id, kind, starts_at, ends_at, period, released_at</td><td>kind = order / return；排斥约束防止同一设备时间重叠</td></tr>
+          <tr><td><code>order_event</code></td><td>event_id, order_id, status, occurred_at, actor_type, details</td><td>event_id 自增，兼作 SSE 的事件 id；索引 (order_id, event_id)</td></tr>
+          <tr><td><code>delivery_review</code></td><td>id, order_id, user_id, rating, comment, created_at</td><td>order_id UNIQUE；rating 1–5</td></tr>
+        </tbody>
+      </table></div>
+      <h3>关键约束（Flyway V1）</h3>
+<pre>CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS citext;
+
+ALTER TABLE device_block ADD COLUMN period tstzrange
+  GENERATED ALWAYS AS (tstzrange(starts_at, ends_at, '[)')) STORED;
+ALTER TABLE device_block ADD CONSTRAINT device_block_no_overlap
+  EXCLUDE USING gist (device_id WITH =, period WITH &amp;&amp;) WHERE (released_at IS NULL);
+
+ALTER TABLE quote_option ADD CONSTRAINT quote_option_quote_uq UNIQUE (quote_id, id);
+ALTER TABLE delivery_order ADD CONSTRAINT order_option_fk
+  FOREIGN KEY (quote_id, option_id) REFERENCES quote_option (quote_id, id);
+ALTER TABLE delivery_order ADD CONSTRAINT order_idem_uq UNIQUE (user_id, idempotency_key);
+ALTER TABLE delivery_order ADD CONSTRAINT order_status_chk CHECK (status IN
+  ('confirmed','dispatched','picked_up','in_transit','arrived','completed','canceled','failed'));</pre>
+      <p class="muted">相对团队原设计的改动：删掉 quote 上的收件人字段；weight_tier 改为 weight_kg；app_user 用 google_sub 和 token_version 取代 auth_provider / provider_subject；新增 user_credential、departs_at、notes、idempotency_key、route_points；补 device_block.released_at；location_event 和 recommendation 放到后续阶段。</p>
+    </section>
+
+    <!-- 6 第三方 -->
+    <section id="thirdparty">
+      <h2><span class="n">6</span>第三方 API</h2>
+      <p>MVP 只依赖 4 个外部服务，全部免费。额度来自各家官网的公开说明，接入前以官网为准。</p>
+      <div class="tw"><table>
+        <thead><tr><th>服务</th><th>用途</th><th>调用方</th><th>Key</th><th>额度</th><th>失败时</th></tr></thead>
+        <tbody>
+          <tr><td><b>Google Identity Services</b></td><td>Google 登录，前端拿 id_token，后端校验</td><td>前端 + 后端</td><td>OAuth Client ID（Google Cloud Console 创建）</td><td>免费</td><td>隐藏 Google 按钮，仍可邮箱登录</td></tr>
+          <tr><td><b>Photon</b>（photon.komoot.io）</td><td>地址补全</td><td>前端</td><td>不需要</td><td>公共服务，合理使用</td><td>提示稍后重试；限流时降低请求频率</td></tr>
+          <tr><td><b>OpenRouteService</b></td><td>机器人步行路线</td><td>后端</td><td>免费注册的 API Key</td><td>约每天 2000 次路线请求</td><td>退回直线 × 1.3 并标记 approximate</td></tr>
+          <tr><td><b>OSRM</b>（自部署）</td><td>演示时替代 ORS</td><td>后端</td><td>不需要</td><td>无限制</td><td>同上</td></tr>
+          <tr><td><b>MapLibre GL JS + OpenFreeMap</b></td><td>旧金山底图</td><td>前端</td><td>不需要</td><td>免费，需显示 OpenStreetMap 署名</td><td>换 Leaflet + OSM 瓦片</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note">每次报价最多 3 次路线请求（只有机器人方案需要），路线存进报价，模拟时不再调用。所以开发和演示期间远低于免费额度。演示前用 Docker 自部署 OSRM（Geofabrik 北加州数据），避免依赖公共服务。</div>
+    </section>
+
+    <!-- 7 后续 -->
+    <section id="later">
+      <h2><span class="n">7</span>后续阶段</h2>
+      <ul>
+        <li><b>Smart Recommendation</b>：<code>POST /ai/recommendation</code>，结合风速（Open-Meteo）、排队情况和用户备注，由 Claude API 给出推荐理由；新增 recommendation 表。</li>
+        <li><b>Agent Mode</b>：<code>POST /agent/chat</code>（SSE）+ 确认接口，对话式下单；新增 conversation、conversation_message、agent_action 表。</li>
+        <li><b>其他</b>：支付和 Checkout、重置密码（需要邮件服务）、收件人免登录追踪链接、接真实设备（启用 location_event 存 GPS 轨迹）。</li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+</body>
+</html>
