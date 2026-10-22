@@ -33,10 +33,10 @@ docker exec -i skylane-db psql -U skylane -d skylane < database/migration/V1__in
 | 成员 | 模块 | 包 | 接口 |
 |---|---|---|---|
 | Shuhua Zhang | 数据库与工程底座 | 根包、`repository/` | —（Entity、Repository、Flyway、DevRunner、统一错误体） |
-| Yuning Cao | 账号与安全 | `user/`、`security/` | `POST /auth/register`、`POST /auth/login`、`GET /me` |
+| Yuning Cao | 账号与安全（兼前端 `/login`）+ Demo 联调负责人 | `user/`、`security/` | `POST /auth/register`、`POST /auth/login`、`GET /me` |
 | Zhuonan Yu | 报价 | `quote/` | `GET /stations`、`POST /quotes` |
 | Ziyue Wang | 订单 | `order/`、`review/` | `POST /orders`、`GET /orders`、`GET /orders/{id}`、`POST /orders/{id}/cancel`、`POST /orders/{id}/review` |
-| Yangming Tang | 模拟与追踪 | `device/`、`tracking/` | `GET /orders/{id}/track`（SSE） |
+| Yangming Tang | 模拟与追踪 | `device/`、`tracking/` | `GET /orders/{id}/track`（SSE；保底方案是在 `GET /orders/{id}` 里加 `position` 供轮询） |
 
 所有接口前缀 `/api/v1`，错误体统一为 `{"error": {"code", "message", "details"}}`。
 
