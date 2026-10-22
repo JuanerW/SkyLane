@@ -10,6 +10,16 @@
   - `backend.html`：Controller、Service、Repository、方法签名
   - `database.html`：ER 图、字段、约束
 
+## 设计讨论记录（可以直接交给 AI 提问）
+
+[`docs/conversation/2026-10-21-design-session.txt`](docs/conversation/2026-10-21-design-session.txt) 是整个设计过程和 AI 的完整对话记录：为什么这样设计、有哪些方案被否掉、每个决定的理由都在里面。
+
+**关于自己负责的部分有疑问时，可以把这个文件交给 AI（Claude Code、ChatGPT 等）后直接提问。** 例如：
+
+> 我是负责报价模块的 Zhuonan Yu。请先阅读 `docs/conversation/2026-10-21-design-session.txt` 和 `docs/design.md`，然后告诉我 `POST /quotes` 要实现哪些逻辑、用到哪些表、有哪些容易出错的地方。
+
+注意：记录里是讨论的全过程，前面有些方案后来被推翻了（例如最早写过 Python 代码、订单号曾考虑 SL-10001 格式）。**内容冲突时一律以 `docs/design.md` 为准。** 提问时也请让 AI 以 `docs/design.md` 为准。
+
 ## 仓库结构
 
 ```
@@ -19,6 +29,9 @@ SkyLane/
 │  ├─ docker-compose.yml           本地 PostgreSQL + PostGIS
 │  └─ database/migration/V1__init.sql   建表脚本
 └─ docs/        设计文档
+   ├─ design.md                     完整技术设计（以此为准）
+   ├─ design/                       可点击的结构图
+   └─ conversation/                 设计讨论的完整对话记录
 ```
 
 ## 技术栈
