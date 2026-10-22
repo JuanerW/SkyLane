@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>SkyLane Frontend Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap">
+<style>
+/* Layout: 顶部说明 → 可点击结构图 + 右侧检查器 → 设计稿与后端差异表 → 目录结构。配色与后端结构图一致 */
+:root {
+  --paper: #f5f5f5; --paper-2: #ececec; --panel: #fbfbfb; --ink: #2d3142; --muted: #4f5d75; --soft: #5a6580;
+  --rule: rgba(45,49,66,0.12); --rule-solid: #bfc0c0; --accent: #bf4520; --accent-tint: rgba(191,69,32,0.08);
+  --link: #2e5aa8; --warn: #9a6200; --warn-tint: rgba(154,98,0,0.10);
+  --sans: "IBM Plex Sans", "Noto Sans SC", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #2d3142; --paper-2: #393e53; --panel: #333849; --ink: #f5f5f5; --muted: #bfc0c0; --soft: #949eb2;
+  --rule: rgba(245,245,245,0.12); --rule-solid: rgba(191,192,192,0.25); --accent: #f08a59; --accent-tint: rgba(240,138,89,0.12);
+  --link: #739fdf; --warn: #e0b45c; --warn-tint: rgba(224,180,92,0.14); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --paper: #2d3142; --paper-2: #393e53; --panel: #333849; --ink: #f5f5f5; --muted: #bfc0c0; --soft: #949eb2;
+  --rule: rgba(245,245,245,0.12); --rule-solid: rgba(191,192,192,0.25); --accent: #f08a59; --accent-tint: rgba(240,138,89,0.12);
+  --link: #739fdf; --warn: #e0b45c; --warn-tint: rgba(224,180,92,0.14); color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px }
+.wrap { max-width: 1680px; margin: 0 auto; display: grid; gap: 20px }
+header { display: grid; gap: 6px }
+.eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--soft) }
+h1 { margin: 0; font-size: 22px; font-weight: 600; text-wrap: balance }
+h2 { margin: 0; font-size: 17px; font-weight: 600; text-wrap: balance }
+.lede { margin: 0; color: var(--muted); max-width: 80ch }
+.lede a, .sec a { color: var(--link) }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; font-size: 12.5px; color: var(--muted) }
+.key { display: inline-flex; align-items: center; gap: 6px }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none }
+.toggle input { accent-color: var(--accent) }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 16px; align-items: start }
+@media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr) } }
+.canvas { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; overflow-x: auto }
+.canvas svg { display: block; width: 100%; min-width: 900px; height: auto }
+.hint { font-size: 12px; color: var(--soft); padding: 8px 12px; border-top: 1px solid var(--rule) }
+.node { cursor: pointer }
+.node rect { fill: var(--panel); stroke: var(--ink); stroke-width: 1; transition: stroke .12s, fill .12s }
+.node text { font-family: var(--mono); font-size: 12.5px; fill: var(--ink); text-anchor: middle; dominant-baseline: central; pointer-events: none }
+.node text.sub { font-family: var(--sans); font-size: 10.5px; fill: var(--soft) }
+.node.page rect { stroke-width: 1.25 }
+.node.ext rect { stroke: var(--rule-solid); stroke-dasharray: 3 3 }
+.node.later rect { stroke-dasharray: 5 4; stroke: var(--soft) }
+.node.later text { fill: var(--soft) }
+.node.focal rect { stroke: var(--accent); stroke-width: 1.5 }
+.gapdot { fill: var(--warn) }
+.node:hover rect { fill: var(--paper-2) }
+.node:focus { outline: none }
+.node:focus-visible rect { stroke: var(--link); stroke-width: 2 }
+.node.sel rect { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 2 }
+.node.nb rect { stroke: var(--link); stroke-width: 1.5 }
+.dim .node:not(.sel):not(.nb) { opacity: .35 }
+.edge { fill: none; stroke: var(--muted); stroke-width: 1.1; opacity: .55 }
+.edge.later { stroke-dasharray: 4 3; stroke-width: 1 }
+.dim .edge { opacity: .12 }
+.dim .edge.out { opacity: 1; stroke: var(--accent); stroke-width: 1.6 }
+.dim .edge.in { opacity: 1; stroke: var(--link); stroke-width: 1.6 }
+.colhead { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; fill: var(--soft); text-anchor: middle }
+.inspector { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 16px; display: grid; gap: 14px;
+  position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100vh - 32px); overflow: auto; min-width: 0 }
+@media (max-width: 1100px) { .inspector { position: static; max-height: none } }
+.ihead { display: grid; gap: 6px }
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+.chip { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--rule-solid); color: var(--muted) }
+.chip.mvp { border-color: var(--accent); color: var(--accent) }
+.chip.gap { border-color: var(--warn); color: var(--warn) }
+.iname { font-family: var(--mono); font-size: 18px; font-weight: 600; overflow-wrap: anywhere; margin: 0 }
+.pkg { font-family: var(--mono); font-size: 12px; color: var(--soft); overflow-wrap: anywhere }
+.role { margin: 0 }
+.sec { display: grid; gap: 6px; min-width: 0 }
+.sec h3 { margin: 0; font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--soft) }
+.sec ul { margin: 0; padding-left: 18px; display: grid; gap: 3px }
+code, .mono { font-family: var(--mono); font-size: 12px }
+pre { margin: 0; background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; overflow-x: auto; font-family: var(--mono); font-size: 12px; line-height: 1.5 }
+.gapbox { border-left: 3px solid var(--warn); background: var(--warn-tint); border-radius: 0 6px 6px 0; padding: 8px 10px; display: grid; gap: 4px; font-size: 13px }
+.links { display: flex; flex-wrap: wrap; gap: 6px }
+.links button { font-family: var(--mono); font-size: 11.5px; padding: 3px 8px; border-radius: 5px; border: 1px solid var(--rule-solid); background: none; color: var(--ink); cursor: pointer }
+.links button.o { border-color: var(--accent); color: var(--accent) }
+.links button.i { border-color: var(--link); color: var(--link) }
+.links button:hover { background: var(--paper-2) }
+.links button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px }
+.none { color: var(--soft); font-size: 12.5px }
+table { border-collapse: collapse; width: 100%; font-size: 13px }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); vertical-align: top }
+th { color: var(--soft); font-weight: 500; font-size: 12px }
+td.n { font-family: var(--mono); color: var(--soft); width: 32px }
+.tw { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px }
+.tw table { min-width: 860px }
+.block { display: grid; gap: 10px }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; align-items: start }
+.pill { font-family: var(--mono); font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--rule-solid); white-space: nowrap }
+.pill.mvp { border-color: var(--accent); color: var(--accent) }
+.pill.later { color: var(--soft) }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">SkyLane · MVP 前端设计 · Next.js App Router</div>
+    <h1>SkyLane 前端结构图</h1>
+    <p class="lede">按设计稿《Dispatch &amp; Delivery Management》的 7 个页面整理：页面 → 数据 Hook → API 层 → 后端 Controller。点击任意方块查看页面分区、组件、调用的接口、加载 / 空 / 错误状态。后端细节见 <a href="backend.html">SkyLane 后端结构图</a>。</p>
+    <div class="bar">
+      <span class="key"><svg width="28" height="10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5" stroke="var(--accent)" stroke-width="2"/></svg>选中节点调用的</span>
+      <span class="key"><svg width="28" height="10" aria-hidden="true"><line x1="0" y1="5" x2="28" y2="5" stroke="var(--link)" stroke-width="2"/></svg>调用选中节点的</span>
+      <span class="key"><svg width="28" height="10" aria-hidden="true"><rect x="1" y="1" width="26" height="8" rx="2" fill="none" stroke="var(--soft)" stroke-dasharray="4 3"/></svg>后续阶段</span>
+      <label class="toggle"><input type="checkbox" id="showLater" checked>显示 Smart Recommendation / Agent Mode</label>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="canvas" aria-label="前端结构图">
+      <svg id="diagram" viewBox="0 0 1120 800" role="img" aria-label="SkyLane 前端结构图"></svg>
+      <div class="hint">图较宽时可左右滑动。键盘：Tab 选中方块，Enter 查看详情。</div>
+    </section>
+    <aside class="inspector" id="inspector" aria-live="polite"></aside>
+  </div>
+
+  <section class="cols">
+    <div class="block">
+      <h2>目录结构</h2>
+      <pre>skylane-fe/
+├─ src/app/                     # Next.js App Router
+│  ├─ (auth)/login/page.tsx            F · Sign In / Sign Up
+│  ├─ (app)/layout.tsx                 AppShell + RequireAuth
+│  ├─ (app)/ship/page.tsx              A · New Delivery
+│  ├─ (app)/ship/plans/page.tsx        B · Compare Plans
+│  ├─ (app)/orders/page.tsx            E · My Orders
+│  ├─ (app)/orders/[id]/track/page.tsx D · Live Tracking
+│  └─ (app)/account/page.tsx           Account Settings
+├─ src/components/              # 按页面分文件夹，通用件放 ui/
+│  ├─ ui/  shell/  ship/  plans/  checkout/
+│  ├─ tracking/  orders/  account/  map/
+├─ src/hooks/                   # 每个 hook 包一组接口
+├─ src/lib/api.ts               # fetch 封装 + ApiError
+├─ src/lib/sse.ts               # fetch + ReadableStream 读 SSE
+├─ src/lib/photon.ts            # 地址补全
+├─ src/lib/time.ts              # 统一按美西时间格式化
+└─ src/types/api.ts             # 由后端 OpenAPI 生成</pre>
+    </div>
+    <div class="block">
+      <h2>页面之间的跳转</h2>
+      <pre>/login ──登录成功──▶ /ship
+/ship   ──Find Delivery Options──▶ /ship/plans
+/ship/plans ──Place order──▶ /orders/[id]/track
+/orders ──Track live──▶ /orders/[id]/track
+/orders ──行点击──▶ 右侧抽屉（详情 / 取消 / 评价）
+顶部导航：New Delivery · My Orders · Account
+（Checkout 暂不做）
+
+寄件草稿（Step 1 的表单、quote_id、选中的 option_id）
+存在 sessionStorage，两个 ship 页面共用；刷新不丢，
+下单成功后清空。</pre>
+    </div>
+  </section>
+</div>
+
+<script>
+// ---------------- 节点 ----------------
+const N = {
+  // ---- 页面 ----
+  PLogin: { label: "/login", sub: "F · Sign In / Sign Up", kind: "page", x: 20, y: 90, w: 210, h: 52, phase: "mvp",
+    role: "登录、注册、Google 登录。右侧是静态的运力介绍，MVP 可以写死文案。",
+    parts: ["SignInForm / SignUpForm（一个表单切换模式，注册多 Full name、Confirm password）", "GoogleButton（Google Identity Services）", "AvailabilityAside（静态示例数字）"],
+    actions: ["Sign in → POST /auth/login → 存 token → 跳 /ship", "Create account → POST /auth/register → 同上", "Continue with Google → 拿 id_token → POST /auth/google", "Forgot password：MVP 不做，隐藏入口"],
+    states: ["按钮 loading", "401 INVALID_CREDENTIALS → 表单顶部错误", "409 EMAIL_TAKEN → 邮箱字段下方错误", "401 INVALID_GOOGLE_TOKEN → 提示 Google 登录失败，可改用邮箱", "400 VALIDATION_ERROR → 字段提示（密码至少 8 位）"],
+    gaps: [] },
+  PShip: { label: "/ship", sub: "A · New Delivery", kind: "page", x: 20, y: 170, w: 210, h: 52, phase: "mvp",
+    role: "Step 1 填写寄件信息。左边是表单，右边是 AI 对话填表（后续阶段），底部是最近 3 单。",
+    parts: ["PackageSection：Description、Weight (kg)、Fragile", "PickupSection：AddressAutocomplete", "DeliverySection：AddressAutocomplete、Recipient name、Recipient phone", "Notes：给配送的备注（可选）", "Arrive within：ASAP / 30 min / 1 h / 2 h（默认 ASAP）", "AssistantChat（Smart Recommendation 阶段）", "RecentActivity（取 GET /orders?limit=100 的前 3 条，与 My Orders 共用缓存）"],
+    actions: ["地址输入 → Photon 补全 → 存 {text, lat, lng}", "Find Delivery Options → 前端校验 → 草稿写入 sessionStorage → 跳 /ship/plans", "Save draft / Clear form → 只动本地存储"],
+    states: ["字段标红：Complete the highlighted fields…", "Photon 失败 → 提示并允许重试", "400 OUT_OF_SERVICE_AREA / SAME_ADDRESS → 地址字段标红（报价时返回，退回此页）"],
+    gaps: [4, 5] },
+  PPlans: { label: "/ship/plans", sub: "B · Compare Plans", kind: "page", x: 20, y: 250, w: 210, h: 52, phase: "mvp", focal: true,
+    role: "Step 2 比较方案并直接下单（MVP 不做 Checkout 页）。进入页面时用草稿调用 POST /quotes，左边地图画路线，右边 6 张方案卡片，底部确认条。",
+    parts: ["PlanFilters：Arrive within、Optimize for、Vehicle", "RouteMap（站点、P / D、各方案路线）", "PlanCard ×6（出发：Now 或 Next free 3:40 PM、到达时间、价格、距离、不可用原因）", "AIRecommendationBanner（Smart Recommendation 阶段）", "NoFeasiblePlan：No delivery can arrive within …", "ConfirmBar：收件人、价格、ETA、Place order"],
+    actions: ["页面加载 → POST /quotes", "改 Arrive within → 重新 POST /quotes（deadline 变了）", "改 Optimize for / Vehicle → 前端排序和过滤，不请求", "选卡片 → 底部确认条", "Place order → POST /orders（带 Idempotency-Key）→ 跳 /orders/[id]/track"],
+    states: ["报价中骨架屏", "全部不可用 → NoFeasiblePlan", "quote 过期（10 分钟）→ 提示并重新报价", "409 QUOTE_STALE / QUOTE_EXPIRED、404 OPTION_NOT_FOUND → 提示 Options updated，自动重新报价", "409 DEADLINE_MISSED / DEVICE_UNAVAILABLE → 该卡片变灰并提示原因"],
+    gaps: [6, 7, 8] },
+  PCheckout: { label: "/ship/checkout", sub: "C · Checkout（暂不做）", kind: "page", x: 20, y: 330, w: 210, h: 52, phase: "later",
+    role: "暂不做。MVP 在 Compare Plans 页底部确认后直接下单。以后加支付时再启用这个页面。",
+    parts: ["DetailsReview：Package、Pickup、Deliver to、Recipient（可编辑）", "PlanSummary：Method、Assigned vehicle、Estimated arrival", "PaymentForm（设计稿有，MVP 去掉）", "OrderSummary：价格明细", "OrderPlaced：订单号、预计到达、Track Delivery"],
+    actions: ["Confirm order → POST /orders（带 Idempotency-Key）", "Change plan → 回 /ship/plans", "Edit request → 回 /ship"],
+    states: ["409 DEVICE_UNAVAILABLE → 提示 This option was just taken 并回到方案页重新报价", "409 QUOTE_EXPIRED → 同上"],
+    gaps: [] },
+  PTrack: { label: "/orders/[id]/track", sub: "D · Live Tracking", kind: "page", x: 20, y: 410, w: 210, h: 52, phase: "mvp",
+    role: "实时追踪。先 GET /orders/{id} 拿路线和订单信息，再连 SSE。完成后同页出现评价。",
+    parts: ["TrackingMap：机器人画真实路线并沿路移动设备点；无人机把每段画成二次贝塞尔弧线，按 progress 在弧线上放飞机图标，配大号倒计时","MapLibre GL + OpenFreeMap 底图（旧金山），备选 Leaflet + OSM", "StagePanel：当前阶段、Arrives、Remaining、Distance left", "ConnectionBanner：Live location unavailable…", "ProgressTimeline", "OrderDetailsCard", "ReviewForm（completed 后显示）"],
+    actions: ["进入页面 → GET /orders/{id} → 连 /orders/{id}/track", "status 事件 → 更新阶段和时间线", "position 事件 → 移动设备点、更新剩余时间", "出发前 → 显示 Scheduled、出发倒计时和 Cancel", "Submit review → POST /orders/{id}/review"],
+    states: ["断线 → ConnectionBanner，自动带 Last-Event-ID 重连", "终态后服务端关流", "409 NOT_CANCELLABLE → 提示 Already departed", "404 ORDER_NOT_FOUND → 回到 My Orders"],
+    gaps: [12] },
+  POrders: { label: "/orders", sub: "E · My Orders", kind: "page", x: 20, y: 490, w: 210, h: 52, phase: "mvp",
+    role: "订单列表和详情抽屉。顶部按状态分 tab，可搜索订单号或收件人，可按日期排序。",
+    parts: ["StatusTabs（带数量）", "SearchBox、SortControl", "OrdersTable：Order、Recipient、Date、Method、Status、ETA / Done、Total", "OrderDrawer：详情、Track live、Cancel、评价", "EmptyState：No orders match"],
+    actions: ["加载 → GET /orders", "行点击 → 抽屉；需要时 GET /orders/{id}", "Cancel → POST /orders/{id}/cancel（只在 confirmed、设备出发前显示，并提示可取消到几点）", "Leave review → POST /orders/{id}/review"],
+    states: ["空列表 → New delivery 引导", "筛选无结果 → Clear filters", "409 NOT_CANCELLABLE → 提示 Already departed 并刷新", "409 NOT_COMPLETED / ALREADY_REVIEWED → 隐藏评价表单", "404 ORDER_NOT_FOUND → 回到列表"],
+    gaps: [11, 14] },
+  PAccount: { label: "/account", sub: "Account Settings", kind: "page", x: 20, y: 570, w: 210, h: 52, phase: "mvp",
+    role: "账号页：邮箱（只读）、显示名、登录方式、修改密码（只对有密码的账号显示）、退出登录。不做通知偏好和付款方式。",
+    parts: ["ProfileForm：Email（只读）、Display name", "ChangePasswordForm：Current、New（has_password 时显示）", "Sign out"],
+    actions: ["加载 → GET /me", "Save changes → PATCH /me", "Change password → PUT /me/password → 用返回的新 token 替换旧 token", "Sign out → 清 token → /login"],
+    states: ["PATCH /me 400 VALIDATION_ERROR → 字段提示", "PUT /me/password 401 INVALID_CREDENTIALS → 当前密码错误", "has_password = false 时不显示修改密码（否则 409 NO_PASSWORD）"],
+    gaps: [] },
+
+  // ---- Hooks ----
+  useAuth: { label: "useAuth", kind: "hook", x: 320, y: 90, w: 200, h: 44, phase: "mvp", pkg: "src/hooks/useAuth.ts + AuthProvider",
+    role: "全局登录态。token 存 localStorage，启动时调 GET /me 恢复；401 时清 token 并跳 /login。",
+    code: `const { user, login, register, loginWithGoogle, logout,
+        updateProfile, changePassword } = useAuth()` },
+  useQuote: { label: "useQuote", kind: "hook", x: 320, y: 170, w: 200, h: 44, phase: "mvp", pkg: "src/hooks/useQuote.ts",
+    role: "TanStack Query mutation。输入是寄件草稿，输出 QuoteDto；记录 expires_at，过期前 30 秒提示。",
+    code: `const quote = useQuote()
+quote.mutate(toQuoteRequest(draft))   // POST /quotes
+// GET /stations 用 useQuery，缓存 1 小时` },
+  useCreateOrder: { label: "useCreateOrder", kind: "hook", x: 320, y: 250, w: 200, h: 44, phase: "mvp", pkg: "src/hooks/useCreateOrder.ts",
+    role: "下单。Idempotency-Key 在选中方案时生成一次，重试复用同一个。成功后让 orders 查询失效并清空草稿。",
+    code: `createOrder.mutate({ quote_id, option_id, recipient })
+// header: Idempotency-Key: crypto.randomUUID()` },
+  useOrders: { label: "useOrders", kind: "hook", x: 320, y: 330, w: 200, h: 44, phase: "mvp", pkg: "src/hooks/useOrders.ts",
+    role: "订单列表、单个订单、取消。列表在前端做 tab / 搜索 / 排序（MVP 数据量小）。",
+    code: `useOrders()            // GET /orders?limit=100
+useOrder(id)           // GET /orders/{id}
+useCancelOrder(id)     // POST /orders/{id}/cancel` },
+  useReview: { label: "useReview", kind: "hook", x: 320, y: 410, w: 200, h: 44, phase: "mvp", pkg: "src/hooks/useReview.ts",
+    role: "提交评价，成功后让该订单查询失效。",
+    code: `submitReview.mutate({ rating, comment })  // POST /orders/{id}/review` },
+  useTrackingStream: { label: "useTrackingStream", kind: "hook", x: 320, y: 490, w: 200, h: 44, phase: "mvp", focal: true, pkg: "src/hooks/useTrackingStream.ts",
+    role: "管理 SSE 连接：记住最后一个 status 事件的 id，断线后 1s / 2s / 4s 退避重连并带 Last-Event-ID；页面卸载时 abort。",
+    code: `const { status, location, timeline, connection } =
+  useTrackingStream(orderId)
+// connection: 'live' | 'reconnecting' | 'closed'` },
+  usePhoton: { label: "useAddressSearch", kind: "hook", x: 320, y: 570, w: 200, h: 44, phase: "mvp", pkg: "src/hooks/useAddressSearch.ts",
+    role: "输入至少 3 个字符、防抖 300ms 后调 Photon。结果转成 {text, lat, lng}，注意 GeoJSON 坐标是 [lng, lat]。" },
+  useDraft: { label: "useShipmentDraft", kind: "hook", x: 320, y: 650, w: 200, h: 44, phase: "mvp", pkg: "src/hooks/useShipmentDraft.ts",
+    role: "三个 ship 页面共享的草稿：表单字段、quote_id、option_id、idempotency_key。存在 sessionStorage，下单成功后清空。不调用任何接口。" },
+  useRecommendation: { label: "useRecommendation", kind: "hook", x: 320, y: 730, w: 200, h: 44, phase: "later", pkg: "src/hooks/useRecommendation.ts",
+    role: "Smart Recommendation 阶段：Plans 页的推荐横幅、New Delivery 页的对话填表。Agent Mode 也在这一层加 useAgentChat。" },
+
+  // ---- API 层 ----
+  ApiClient: { label: "lib/api.ts", sub: "fetch 封装", kind: "lib", x: 600, y: 80, w: 180, h: 380, phase: "mvp",
+    role: "所有 REST 请求的唯一出口：拼 base URL、加 Authorization、把错误体转成 ApiError(code)。页面里只按 code 分支，不解析 message。",
+    code: `export class ApiError extends Error {
+  constructor(public status: number, public code: string, message: string) { super(message) }
+}
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(BASE + path, { ...init, headers: {
+    'Content-Type': 'application/json',
+    Authorization: \`Bearer \${getToken()}\`, ...init?.headers } })
+  if (res.status === 401) { clearToken(); location.href = '/login' }
+  if (!res.ok) { const { error } = await res.json(); throw new ApiError(res.status, error.code, error.message) }
+  return res.status === 204 ? (undefined as T) : res.json()
+}` },
+  SseClient: { label: "lib/sse.ts", sub: "fetch + ReadableStream", kind: "lib", x: 600, y: 490, w: 180, h: 44, phase: "mvp",
+    role: "EventSource 不能带 Authorization 头，所以用 fetch 读流，自己按空行切分事件，解析 event / id / data。" },
+  PhotonClient: { label: "lib/photon.ts", kind: "lib", x: 600, y: 570, w: 180, h: 44, phase: "mvp",
+    role: "直接请求 photon.komoot.io，用 bbox 限定在服务城市范围内。不经过后端。" },
+  Storage: { label: "sessionStorage", sub: "浏览器本地", kind: "lib", x: 600, y: 650, w: 180, h: 44, phase: "mvp",
+    role: "存寄件草稿。token 存 localStorage（由 useAuth 管理）。" },
+
+  // ---- 后端 ----
+  AuthController: { label: "AuthController", sub: "/auth/** · /me", kind: "backend", x: 870, y: 90, w: 220, h: 48, phase: "mvp", be: "AuthController",
+    role: "POST /auth/register · /auth/login · /auth/google，GET /me。" },
+  QuoteController: { label: "QuoteController", sub: "/stations · /quotes", kind: "backend", x: 870, y: 170, w: 220, h: 48, phase: "mvp", be: "QuoteController",
+    role: "GET /stations，POST /quotes。" },
+  OrderController: { label: "OrderController", sub: "/orders/**", kind: "backend", x: 870, y: 250, w: 220, h: 48, phase: "mvp", be: "OrderController",
+    role: "POST /orders，GET /orders，GET /orders/{id}，POST /orders/{id}/cancel。" },
+  ReviewController: { label: "ReviewController", sub: "/orders/{id}/review", kind: "backend", x: 870, y: 410, w: 220, h: 48, phase: "mvp", be: "ReviewController",
+    role: "POST /orders/{id}/review。" },
+  TrackingController: { label: "TrackingController", sub: "SSE", kind: "backend", x: 870, y: 488, w: 220, h: 48, phase: "mvp", be: "TrackingController",
+    role: "GET /orders/{id}/track，text/event-stream。" },
+  Photon: { label: "Photon", sub: "外部 · 地址补全", kind: "external", x: 870, y: 568, w: 220, h: 48, phase: "mvp",
+    role: "基于 OpenStreetMap 的免费地址补全，无需 Key。" },
+  AiControllers: { label: "AI Controllers", sub: "/ai/** · /agent/**", kind: "backend", x: 870, y: 728, w: 220, h: 48, phase: "later", be: "RecommendationController",
+    role: "Smart Recommendation 与 Agent Mode 的接口，MVP 之后接入。" },
+};
+
+const E = [
+  // 页面 → hook
+  ["PLogin", "useAuth"],
+  ["PShip", "usePhoton", { mid: 250 }], ["PShip", "useDraft", { mid: 258, fy: 6 }], ["PShip", "useOrders", { mid: 266, fy: 12 }], ["PShip", "useRecommendation", { mid: 274, fy: -8 }],
+  ["PPlans", "useQuote", { mid: 282 }], ["PPlans", "useDraft", { mid: 290, fy: 8 }], ["PPlans", "useRecommendation", { mid: 298, fy: 14 }],
+  ["PPlans", "useCreateOrder", { mid: 306, fy: -14 }],
+  ["PCheckout", "useCreateOrder", { mid: 250 }], ["PCheckout", "useDraft", { mid: 314, fy: 8 }],
+  ["PTrack", "useTrackingStream", { mid: 258 }], ["PTrack", "useOrders", { mid: 266, fy: -8 }], ["PTrack", "useReview", { fy: 0 }],
+  ["POrders", "useOrders", { mid: 274 }], ["POrders", "useReview", { mid: 282, fy: -8 }],
+  ["PAccount", "useAuth", { mid: 290, ty: 10 }],
+  // hook → lib
+  ["useAuth", "ApiClient", { ty: 0 }], ["useQuote", "ApiClient"], ["useCreateOrder", "ApiClient"], ["useOrders", "ApiClient"], ["useReview", "ApiClient"],
+  ["useTrackingStream", "SseClient"], ["usePhoton", "PhotonClient"], ["useDraft", "Storage"],
+  ["useRecommendation", "AiControllers", { pts: [[520, 752], [870, 752]] }],
+  // lib → 后端
+  ["ApiClient", "AuthController", { abs: 114 }], ["ApiClient", "QuoteController", { abs: 194 }], ["ApiClient", "OrderController", { abs: 274 }], ["ApiClient", "ReviewController", { abs: 434 }],
+  ["SseClient", "TrackingController"], ["PhotonClient", "Photon"],
+];
+
+// ---------------- 设计稿 vs 后端差异 ----------------
+const GAPS = [
+  [1, "C · Checkout", "Stripe 付款、价格明细、税、短信通知", "MVP 不收款", "暂不做 Checkout 页。在 Compare Plans 底部确认条直接下单", "已定"],
+  [2, "F · Sign In", "Forgot password → 发重置邮件", "没有接口", "MVP 不做，隐藏入口", "已定"],
+  [3, "Account", "资料编辑、通知偏好、付款方式", "GET / PATCH /me、PUT /me/password", "做 Account 页：显示名、修改密码、退出；不做通知和付款方式", "已定"],
+  [4, "A · New Delivery", "Weight (kg)、Size、Special handling、Pickup notes", "只有 weight_tier 和 fragile", "保留 Weight（kg 直接传给后端计价）和 Fragile；Size 和 Special handling 去掉；新增一个 notes 字段（给配送的备注），随 POST /quotes 传，下单时后端从报价复制到订单。Weight 上限 10 kg", "已定"],
+  [5, "A / B", "Delivery time 和 Arrive within 两处都能选时间", "QuoteRequest 有 deadline", "统一成一个 Arrive within 选项：ASAP（默认，不设 deadline）/ 30 min / 1 h / 2 h，换算成 deadline。New Delivery 选一次，Compare Plans 可以改", "已定"],
+  [6, "B · Compare Plans", "按产品命名的方案", "6 个方案 = 3 站点 × 2 设备", "MVP 固定 6 个方案，前端按设备类型分组、站点作副标题。后端按“站点列表 × 设备类型列表”生成，加站点或设备类型时自动变多", "已定"],
+  [9, "B · Compare Plans", "设备忙时是否还能选", "设备时间表在 device_block", "设备随时可接新单：忙的设备也能选，卡片显示 Next free 时间，订单排在当前任务和返航之后，ETA 含等待。价格 = kg × 英里 × $1", "已定"],
+  [10, "全部页面", "时间显示", "数据库按 UTC 存", "统一按美西时间 America/Los_Angeles 显示，由 lib/time.ts 统一格式化", "已定"],
+  [15, "E / D", "取消订单", "POST /orders/{id}/cancel", "保留。只能在设备出发前取消，出发后按钮隐藏。预约 1 小时后出发的订单，这 1 小时内可以取消", "已定"],
+  [16, "D · Live Tracking", "实时位置", "原设计每秒写 location_event", "位置不存库，由路线、出发时间和速度实时算出；仍用 SSE 推送，接口不变。断线重连后位置自然是对的", "已定"],
+  [7, "B · Compare Plans", "Optimize for、Vehicle 过滤", "后端返回 fastest / cheapest / recommended 标签", "前端排序和过滤，不请求后端", "已定"],
+  [8, "B · Compare Plans", "No delivery can arrive within N minutes", "MVP 暂未实现 DEADLINE_MISSED", "选了 Arrive within 就需要它：把 DEADLINE_MISSED 加回 MVP", "已定"],
+  [11, "E · My Orders", "人类可读订单号 DD-20431", "订单 id 是 UUID", "统一用 UUID，列表和详情显示前 8 位（如 3f2a9c1e），点击可复制完整 ID", "已定"],
+  [12, "D · Live Tracking", "Confirm receipt & submit review", "到达后自动完成", "到达后自动 completed；去掉 Confirm receipt，completed 后只显示 Submit review", "已定"],
+  [13, "全部页面", "Jinshan City + 示意地图", "种子数据和地址补全在旧金山", "推荐用真实旧金山 OSM 地图", "待讨论"],
+  [14, "E · My Orders", "状态 tab、搜索、排序", "GET /orders 只分页", "MVP 一次取最近 100 单（GET /orders?limit=100），tab 计数、按订单号前缀 / 收件人搜索、按日期排序都在前端做。以后订单多了再加 ?status=&q=&sort=，前端只改 useOrders 一处", "已定"],
+];
+const GAP_LATER = [["A · New Delivery", "Fill it in by chatting（AI 对话填表）", "Smart Recommendation"], ["B · Compare Plans", "AI 推荐横幅", "Smart Recommendation"]];
+
+// ---------------- 绘制（与后端图相同的工具函数） ----------------
+const R = 8;
+function rounded(pts) {
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, py] = pts[i - 1], [x, y] = pts[i], [nx, ny] = pts[i + 1];
+    const l1 = Math.hypot(x - px, y - py), l2 = Math.hypot(nx - x, ny - y);
+    const r = Math.min(R, l1 / 2, l2 / 2);
+    d += ` L${x - (x - px) / l1 * r},${y - (y - py) / l1 * r} Q${x},${y} ${x + (nx - x) / l2 * r},${y + (ny - y) / l2 * r}`;
+  }
+  const last = pts[pts.length - 1];
+  return d + ` L${last[0]},${last[1]}`;
+}
+function edgePts(a, b, o = {}) {
+  if (o.pts) return o.pts;
+  const x1 = a.x + a.w, x2 = b.x;
+  if (o.abs != null) return [[x1, o.abs], [x2, o.abs]];
+  const y1 = a.y + a.h / 2 + (o.fy || 0);
+  let y2 = b.y + b.h / 2 + (o.ty || 0);
+  if (b.h > 100) y2 = Math.min(Math.max(y1, b.y + 12), b.y + b.h - 12);   // 高的 API 盒子：水平进入
+  if (y1 === y2) return [[x1, y1], [x2, y2]];
+  const mid = o.mid ?? (x1 + x2) / 2;
+  return [[x1, y1], [mid, y1], [mid, y2], [x2, y2]];
+}
+
+const svgNS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("diagram");
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(svgNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const IN = {}, OUT = {};
+for (const id in N) { IN[id] = []; OUT[id] = []; }
+E.forEach(([a, b]) => { OUT[a].push(b); IN[b].push(a); });
+const isLater = id => N[id].phase === "later";
+const edgeEls = [];
+
+function draw() {
+  svg.innerHTML = "";
+  const defs = el("defs", {}, svg);
+  for (const [id, color] of [["arw", "var(--muted)"], ["arw-o", "var(--accent)"], ["arw-i", "var(--link)"]]) {
+    const m = el("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0 0L10 5L0 10z", fill: color }, m);
+  }
+  for (const [x, t] of [[125, "PAGE · 路由"], [420, "HOOK · 数据"], [690, "API 层"], [980, "后端 / 外部"]]) {
+    const ct = el("text", { class: "colhead", x, y: 66 }, svg); ct.textContent = t;
+  }
+  const g = el("g", {}, svg);
+  E.forEach(([a, b, o]) => {
+    const p = el("path", { class: "edge" + (isLater(a) || isLater(b) ? " later" : ""), d: rounded(edgePts(N[a], N[b], o)), "marker-end": "url(#arw)" }, g);
+    edgeEls.push({ p, a, b });
+  });
+  for (const id in N) {
+    const n = N[id];
+    const cls = ["node", n.kind, n.kind === "external" ? "ext" : "", n.phase === "later" ? "later" : "", n.focal ? "focal" : ""].join(" ");
+    const ng = el("g", { class: cls, tabindex: 0, role: "button", "data-id": id, "aria-label": n.label }, svg);
+    el("rect", { x: n.x, y: n.y, width: n.w, height: n.h, rx: n.kind === "external" ? n.h / 2 : 6 }, ng);
+    const cy = n.h > 100 ? n.y + 28 : n.y + n.h / 2;
+    const t = el("text", { x: n.x + n.w / 2, y: n.sub ? cy - 7 : cy }, ng); t.textContent = n.label;
+    if (n.sub) { const s = el("text", { class: "sub", x: n.x + n.w / 2, y: cy + 10 }, ng); s.textContent = n.sub; }
+    ng.addEventListener("click", () => select(id));
+    ng.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(id); } });
+  }
+  applyPhase();
+}
+
+const KIND = { page: "页面", hook: "Hook", lib: "API 层", backend: "后端 Controller", external: "外部服务" };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const list = (title, arr) => arr && arr.length ? `<div class="sec"><h3>${title}</h3><ul>${arr.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+
+function render(id) {
+  const n = N[id];
+  let h = `<div class="ihead"><div class="chips"><span class="chip">${KIND[n.kind]}</span><span class="chip ${n.phase === "mvp" ? "mvp" : ""}">${n.phase === "mvp" ? "MVP" : "后续阶段"}</span></div>
+    <h2 class="iname">${esc(n.label)}</h2>${n.sub ? `<div class="pkg">${esc(n.sub)}</div>` : ""}${n.pkg ? `<div class="pkg">${esc(n.pkg)}</div>` : ""}</div>
+    <p class="role">${esc(n.role)}</p>`;
+  h += list("页面分区 / 组件", n.parts) + list("用户操作 → 请求", n.actions) + list("状态", n.states);
+  if (n.code) h += `<div class="sec"><h3>用法</h3><pre>${esc(n.code)}</pre></div>`;
+  if (n.be) h += `<div class="sec"><h3>接口细节</h3><a href="backend.html#${n.be}">在后端结构图中查看 ${esc(n.be)}</a></div>`;
+  const btns = (arr, cls) => arr.length ? `<div class="links">${[...new Set(arr)].map(x => `<button class="${cls}" data-go="${x}">${esc(N[x].label)}</button>`).join("")}</div>` : `<div class="none">无</div>`;
+  h += `<div class="sec"><h3>调用</h3>${btns(OUT[id], "o")}</div><div class="sec"><h3>被谁调用</h3>${btns(IN[id], "i")}</div>`;
+  const insp = document.getElementById("inspector");
+  insp.innerHTML = h;
+  insp.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
+    const t = b.dataset.go;
+    if (isLater(t) && !document.getElementById("showLater").checked) { document.getElementById("showLater").checked = true; applyPhase(); }
+    select(t);
+  }));
+}
+
+function select(id) {
+  svg.classList.add("dim");
+  svg.querySelectorAll(".node").forEach(g => {
+    const nid = g.dataset.id;
+    g.classList.toggle("sel", nid === id);
+    g.classList.toggle("nb", nid !== id && (OUT[id].includes(nid) || IN[id].includes(nid)));
+  });
+  edgeEls.forEach(({ p, a, b }) => {
+    p.classList.remove("out", "in");
+    p.setAttribute("marker-end", a === id ? "url(#arw-o)" : b === id ? "url(#arw-i)" : "url(#arw)");
+    if (a === id) p.classList.add("out"); else if (b === id) p.classList.add("in");
+  });
+  render(id);
+  try { history.replaceState(null, "", "#" + id); } catch (e) {}
+}
+
+function applyPhase() {
+  const show = document.getElementById("showLater").checked;
+  svg.querySelectorAll(".node").forEach(g => { if (isLater(g.dataset.id)) g.style.display = show ? "" : "none"; });
+  edgeEls.forEach(({ p, a, b }) => { if (isLater(a) || isLater(b)) p.style.display = show ? "" : "none"; });
+}
+document.getElementById("showLater").addEventListener("change", applyPhase);
+
+// 差异表
+const tb = document.querySelector("#gapTable tbody") || {};
+tb.innerHTML = GAPS.map(([k, page, design, be, rec, stage]) => `<tr><td class="n">${k}</td><td>${esc(page)}</td><td>${esc(design)}</td><td>${esc(be)}</td><td>${esc(rec)}</td><td><span class="pill ${stage === "已定" ? "mvp" : "later"}">${esc(stage)}</span></td></tr>`).join("")
+  + GAP_LATER.map(([page, design, ph]) => `<tr><td class="n">—</td><td>${esc(page)}</td><td>${esc(design)}</td><td>MVP 不做</td><td>MVP 隐藏这块，留出位置</td><td><span class="pill later">${esc(ph)}</span></td></tr>`).join("");
+
+draw();
+const start = decodeURIComponent((location.hash || "").slice(1));
+select(N[start] ? start : "PPlans");
+</script>
+
+</body>
+</html>
