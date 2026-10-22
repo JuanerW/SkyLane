@@ -1,0 +1,22 @@
+# 密钥
+.env
+.env.*
+!.env.example
+
+# 前端
+node_modules/
+.next/
+out/
+
+# 后端
+target/
+build/
+.gradle/
+*.class
+
+# IDE / 系统
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
