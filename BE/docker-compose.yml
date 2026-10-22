@@ -1,0 +1,17 @@
+# 本地数据库：PostgreSQL 16 + PostGIS
+# 启动：在 BE/ 目录下运行 docker compose up -d
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: skylane-db
+    environment:
+      POSTGRES_DB: skylane
+      POSTGRES_USER: skylane
+      POSTGRES_PASSWORD: skylane
+    ports:
+      - "5432:5432"
+    volumes:
+      - skylane-db-data:/var/lib/postgresql/data
+
+volumes:
+  skylane-db-data:

@@ -10,6 +10,17 @@
   - `backend.html`：Controller、Service、Repository、方法签名
   - `database.html`：ER 图、字段、约束
 
+## 仓库结构
+
+```
+SkyLane/
+├─ FE/          前端（Next.js），说明见 FE/README.md
+├─ BE/          后端（Spring Boot）和数据库，说明见 BE/README.md
+│  ├─ docker-compose.yml           本地 PostgreSQL + PostGIS
+│  └─ database/migration/V1__init.sql   建表脚本
+└─ docs/        设计文档
+```
+
 ## 技术栈
 
 | 部分 | 技术 |
