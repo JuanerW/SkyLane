@@ -62,7 +62,9 @@ Shuhua（表、Repository、种子数据）
 
 ## 协作约定
 
-- 不直接推送到 `main`，一律通过 Pull Request 合并，至少 1 人 Review。
+- **可以用 AI 写代码**（Claude Code、Cursor、Copilot 等都行）。提交前自己读一遍、跑通，对代码负责的是提交的人。
+- 不直接推送到 `main`，一律通过 Pull Request 合并。
+- **合并前必须经过一次 Review**，作者自己不能直接合并。Review 可以由另一位组员做，也可以用 AI Review（例如 Claude Code 的 `/code-review`）。用 AI Review 时，把 Review 结果贴到 PR 评论里，提出的问题处理完再合并。
 - 分支命名：`fe/<功能>`、`be/<功能>`，例如 `be/quote-service`。
 - 改接口字段时先改后端 DTO，并在 PR 里 @ 前端同学。
 - 设计有变动时，同步更新 `docs/design.md`。
