@@ -43,11 +43,42 @@ SkyLane/
 | 数据库 | PostgreSQL 16 + PostGIS |
 | 第三方 | Google Identity Services、Photon、OpenRouteService / OSRM、OpenFreeMap |
 
-## 第一轮目标：走通一次完整流程
+## 第一轮目标：做出第一个 Demo
 
-> 注册 / 登录 → 填写寄件信息 → 看到 6 个方案 → 下单 → 地图上看到设备移动 → 自动完成 → 评价 → 在 My Orders 里看到这一单
+第一轮的验收标准只有一条：**在本地完整演示一次下面的流程，中途不报错、不需要手动改数据库。**
 
-第一轮只求跑通，不求完善。下面这些放到第二轮：Google 登录、修改密码、订单搜索和筛选、取消订单的边界情况、自部署 OSRM。
+### Demo 脚本（约 5 分钟）
+
+| # | 操作 | 观众应该看到 |
+|---|---|---|
+| 1 | 打开前端，注册一个新账号 | 自动登录，进入 New Delivery |
+| 2 | 填写物品（如 1.5 kg 蛋糕）、取件和收件地址（旧金山）、收件人、Arrive within 选 ASAP | 地址输入时有补全提示 |
+| 3 | 点 Find Delivery Options | 地图上出现 3 个站点和路线，右侧 6 张方案卡片，有 fastest / cheapest / recommended 标签，不可用的方案显示原因 |
+| 4 | 选一张卡片，点 Place order | 跳到追踪页 |
+| 5 | 等待（模拟器开 10 倍速） | 设备从站点出发，机器人沿街道、无人机沿弧线移动；时间线依次出现 dispatched → picked_up → in_transit → arrived → completed |
+| 6 | 完成后提交 5 星评价 | 评价保存成功 |
+| 7 | 打开 My Orders | 新订单在列表最上面，状态 completed；下面还有种子数据里的历史订单 |
+
+### Demo 验收清单
+
+- [ ] `docker compose up -d` 启动数据库，后端启动时 Flyway 自动建表、DevRunner 写入种子数据
+- [ ] 后端 `skylane.sim.speed` 设成 10，一单在 3 分钟内跑完
+- [ ] 前端 `npm run dev` 启动，连上本地后端
+- [ ] 上面 7 步连续走两遍都不出错
+- [ ] 准备一组固定的演示地址，事先确认 6 个方案里至少 4 个可用
+
+### 为了 Demo 稳定，第一轮可以先简化
+
+| 内容 | 第一轮做法 | 第二轮 |
+|---|---|---|
+| 机器人路线 | 先用 routing.openstreetmap.de（不需要 Key）；出错时退回直线，不能让报价失败 | OpenRouteService / 自部署 OSRM |
+| 实时追踪 | 能显示移动就行；如果 SSE 来不及，先用每 2 秒轮询 `GET /orders/{id}`，接口不变 | SSE + 断线重连 |
+| 登录 | 只做邮箱注册和登录 | Google 登录、修改密码、Account 页 |
+| My Orders | 只做列表和详情 | 搜索、筛选、排序 |
+| 取消订单 | 后端接口做好，前端放一个按钮即可 | 出发前倒计时、边界情况 |
+| 部署 | 只在本地演示 | 部署到线上 |
+
+不在 Demo 脚本里的功能，第一轮都可以不做。
 
 ## 分工
 
