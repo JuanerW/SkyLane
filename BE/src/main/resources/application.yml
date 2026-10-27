@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: skylane-be
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/skylane}
+    username: ${DB_USER:skylane}
+    password: ${DB_PASSWORD:skylane}
+  flyway:
+    enabled: true
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: always
+
+# Same layout as design.md. Every key has a default in code, so a missing key never breaks the quote module.
+skylane:
+  pricing:
+    usd-per-kg-mile: 1.00
+    min-cents: 100
+  quote:
+    ttl-minutes: 10
+    drone-max-kg: 2
+    robot-max-kg: 10
+    drone-max-round-trip-km: 15
+    robot-speed-mps: 1.5
+    drone-speed-mps: 15
+    handling-minutes: 1
+    drone-overhead-minutes: 2
+  service-area:
+    min-lat: 37.70
+    max-lat: 37.84
+    min-lng: -122.52
+    max-lng: -122.35
+  routing:
+    osm-base-url: https://routing.openstreetmap.de/routed-foot/route/v1/foot
+    timeout-ms: 3000
+    fallback-factor: 1.3
+  dev:
+    user-email: alice@skylane.dev
