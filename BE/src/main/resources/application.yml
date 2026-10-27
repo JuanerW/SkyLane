@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: skylane
+  profiles:
+    default: dev
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/skylane}
+    username: ${DATABASE_USERNAME:skylane}
+    password: ${DATABASE_PASSWORD:skylane}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+skylane:
+  jwt:
+    secret: ${JWT_SECRET:}
+    ttl-days: 7
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+  cors:
+    allowed-origins: ${FRONTEND_ORIGIN:http://localhost:3000}
+  routing:
+    provider: ${ROUTING_PROVIDER:ors}
+    ors-api-key: ${ORS_API_KEY:}
+    osrm-base-url: ${OSRM_URL:}
+  pricing:
+    usd-per-kg-mile: 1.00
+    min-cents: 100
+  quote:
+    ttl-minutes: 10
+    stale-tolerance-minutes: 5
+  service-area:
+    min-lat: 37.70
+    max-lat: 37.84
+    min-lng: -122.52
+    max-lng: -122.35
+  sim:
+    speed: 1.0
+
+logging:
+  level:
+    org.flywaydb: INFO
