@@ -61,7 +61,8 @@ export default function TrackPage({ params }: { params: { id: string } }) {
                 {departIn === null ? "--:--" : formatCountdown(departIn)}
               </p>
               <p className="mt-1 text-sm text-slate-500">until departure</p>
-              {o.cancellable && (
+              {/* cancellable is a snapshot; hide it once the countdown hits 0 (server still decides, D11). */}
+              {o.cancellable && departIn !== null && departIn > 0 && (
                 <div className="mt-4">
                   <CancelButton orderId={o.order_id} />
                 </div>

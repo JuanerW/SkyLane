@@ -12,7 +12,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (hydrated && !token) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    if (!hydrated || token) return;
+    // Keep the query string so e.g. /ship/plans?… comes back intact (same as lib/api.ts on 401).
+    router.replace(`/login?next=${encodeURIComponent(pathname + window.location.search)}`);
   }, [hydrated, token, pathname, router]);
 
   if (!hydrated || !token) {

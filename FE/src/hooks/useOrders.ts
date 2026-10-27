@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { OrderDetail, OrderSummary, Review } from "@/types/contract";
+import { TERMINAL_STATUSES, type OrderDetail, type OrderSummary, type Review } from "@/types/contract";
 
 // /ship also reads this key (first 3 rows as "recent orders"), so keep limit=100 in both places.
 export const ordersKey = ["orders", { limit: 100 }] as const;
@@ -12,6 +12,8 @@ export function useOrders() {
   return useQuery({
     queryKey: ordersKey,
     queryFn: () => api.get<OrderSummary[]>("/orders?limit=100"),
+    // Statuses only change on the server; poll while any order is still moving.
+    refetchInterval: (q) => (q.state.data?.some((o) => !TERMINAL_STATUSES.includes(o.status)) ? 10_000 : false),
   });
 }
 
@@ -20,6 +22,7 @@ export function useOrder(id: string | null) {
     queryKey: orderKey(id ?? ""),
     queryFn: () => api.get<OrderDetail>(`/orders/${id}`),
     enabled: !!id,
+    refetchInterval: (q) => (q.state.data && !TERMINAL_STATUSES.includes(q.state.data.status) ? 10_000 : false),
   });
 }
 

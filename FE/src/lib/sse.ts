@@ -79,12 +79,22 @@ export function openStream(path: string, opts: StreamOptions): () => void {
       buffer += decoder.decode(value, { stream: true }).replace(/\r\n?/g, "\n");
       let sep: number;
       while ((sep = buffer.indexOf("\n\n")) >= 0) {
-        const msg = parseBlock(buffer.slice(0, sep));
+        const { msg, id } = parseBlock(buffer.slice(0, sep));
         buffer = buffer.slice(sep + 2);
-        if (!msg) continue;
+        if (!msg) {
+          if (id !== undefined) lastEventId = id; // id-only block still moves the cursor
+          continue;
+        }
+        let terminal = false;
+        try {
+          opts.onMessage(msg);
+          terminal = opts.isTerminal?.(msg) ?? false;
+        } catch (e) {
+          // A malformed frame must not look like a network error (that would loop reconnecting).
+          console.error("[sse] bad message, skipped", msg, e);
+        }
         if (msg.id) lastEventId = msg.id;
-        opts.onMessage(msg);
-        if (opts.isTerminal?.(msg)) return true;
+        if (terminal) return true;
       }
     }
   }
@@ -93,7 +103,8 @@ export function openStream(path: string, opts: StreamOptions): () => void {
   return () => stop("closed");
 }
 
-export function parseBlock(block: string): SseMessage | null {
+/** `msg` is null when the block has no data lines; `id` is returned either way. */
+export function parseBlock(block: string): { msg: SseMessage | null; id?: string } {
   let event = "message";
   let id: string | undefined;
   const data: string[] = [];
@@ -106,5 +117,5 @@ export function parseBlock(block: string): SseMessage | null {
     else if (field === "data") data.push(value);
     else if (field === "id") id = value;
   }
-  return data.length ? { event, data: data.join("\n"), id } : null;
+  return { msg: data.length ? { event, data: data.join("\n"), id } : null, id };
 }

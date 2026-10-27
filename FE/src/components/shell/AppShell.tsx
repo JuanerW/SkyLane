@@ -41,9 +41,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Mock data</span>
             )}
             {user && <span className="text-slate-600">{user.display_name}</span>}
-            <button onClick={logout} className="text-slate-500 hover:text-slate-900">
-              Sign out
-            </button>
+            {/* Mock mode has no real token to clear, so signing out would do nothing. */}
+            {!USE_MOCK && (
+              <button onClick={logout} className="text-slate-500 hover:text-slate-900">
+                Sign out
+              </button>
+            )}
           </div>
         </div>
       </header>
