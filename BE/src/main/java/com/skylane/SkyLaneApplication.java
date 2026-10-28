@@ -6,8 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
-public class SkylaneApplication {
+public class SkyLaneApplication {
     public static void main(String[] args) {
-        SpringApplication.run(SkylaneApplication.class, args);
+        SpringApplication.run(SkyLaneApplication.class, args);
     }
 }

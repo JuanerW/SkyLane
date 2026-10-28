@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Runs with profile 'dev' (fake logged-in test user). Needs the PostGIS database with Flyway V1 and database/dev-seed-quote.sql applied. Run with
- * SKYLANE_TEST_DB=1 DB_URL=jdbc:postgresql://localhost:5433/skylane mvn test
+ * SKYLANE_TEST_DB=1 DATABASE_URL=jdbc:postgresql://localhost:5433/skylane ./gradlew test
  */
 @EnabledIfEnvironmentVariable(named = "SKYLANE_TEST_DB", matches = ".+")
 @ActiveProfiles("dev")
