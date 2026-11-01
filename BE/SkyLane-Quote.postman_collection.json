@@ -1,0 +1,61 @@
+{
+  "info": {
+    "name": "SkyLane Quote Demo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [{ "key": "base", "value": "http://localhost:8089/api/v1" }],
+  "item": [
+    {
+      "name": "1. GET stations",
+      "request": { "method": "GET", "url": "{{base}}/stations" }
+    },
+    {
+      "name": "2. POST quote (Ferry Building -> Oracle Park, 1.5 kg, ASAP)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/quotes",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"item\": { \"description\": \"Cake\", \"fragile\": true },\n  \"weight_kg\": 1.5,\n  \"pickup\": { \"text\": \"Ferry Building\", \"lat\": 37.7955, \"lng\": -122.3937 },\n  \"dropoff\": { \"text\": \"Oracle Park\", \"lat\": 37.7786, \"lng\": -122.3893 }\n}"
+        }
+      }
+    },
+    {
+      "name": "3. POST quote (deadline 60 min -> some DEADLINE_MISSED)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/quotes",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"item\": { \"description\": \"Cake\", \"fragile\": true },\n  \"weight_kg\": 1.5,\n  \"pickup\": { \"text\": \"Ferry Building\", \"lat\": 37.7955, \"lng\": -122.3937 },\n  \"dropoff\": { \"text\": \"Oracle Park\", \"lat\": 37.7786, \"lng\": -122.3893 },\n  \"arrive_within_minutes\": 60\n}"
+        }
+      }
+    },
+    {
+      "name": "4. POST quote (3 kg -> drones OVERWEIGHT)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/quotes",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"item\": { \"description\": \"Books\", \"fragile\": false },\n  \"weight_kg\": 3,\n  \"pickup\": { \"text\": \"Ferry Building\", \"lat\": 37.7955, \"lng\": -122.3937 },\n  \"dropoff\": { \"text\": \"Oracle Park\", \"lat\": 37.7786, \"lng\": -122.3893 }\n}"
+        }
+      }
+    },
+    {
+      "name": "5. POST quote (outside SF -> OUT_OF_SERVICE_AREA)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": "{{base}}/quotes",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"item\": { \"description\": \"x\", \"fragile\": false },\n  \"weight_kg\": 1,\n  \"pickup\": { \"text\": \"New York\", \"lat\": 40.71, \"lng\": -74.0 },\n  \"dropoff\": { \"text\": \"Oracle Park\", \"lat\": 37.7786, \"lng\": -122.3893 }\n}"
+        }
+      }
+    }
+  ]
+}
