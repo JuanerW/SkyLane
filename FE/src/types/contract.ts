@@ -94,6 +94,55 @@ export interface PositionEvent {
   remaining_s: number;
 }
 
-export const TERMINAL_STATUSES: OrderStatus[] = ["completed", "canceled", "failed"];
+export interface Place {
+  text: string;
+  lat: number;
+  lng: number;
+}
+
+/** POST /quotes body */
+export interface QuoteRequest {
+  item: { description: string; fragile: boolean };
+  weight_kg: number;
+  pickup: Place;
+  dropoff: Place;
+  notes?: string;
+  arrive_within_minutes?: number;
+}
+
+export type QuoteTag = "fastest" | "cheapest" | "recommended";
+
+/** Time, price, distance and route are null when the option is unavailable. */
+export interface QuoteOption {
+  option_id: string;
+  station: { id: string; name: string; lat: number; lng: number };
+  device_type: DeviceType;
+  available: boolean;
+  unavailable_reason: string | null;
+  departs_at: string | null;
+  eta_at: string | null;
+  price_cents: number | null;
+  distance_m: number | null;
+  route_points: LatLngTuple[] | null;
+  tags: QuoteTag[];
+}
+
+export interface QuoteResponse {
+  quote_id: string;
+  expires_at: string;
+  options: QuoteOption[];
+}
+
+/** POST /orders response */
+export interface CreateOrderResponse {
+  order_id: string;
+  status: OrderStatus;
+  device: { code: string; device_type: DeviceType } | null;
+  price_cents: number;
+  departs_at: string;
+  eta_at: string;
+}
+
+export const TERMINAL_STATUSES: OrderStatus[] =["completed", "canceled", "failed"];
 
 export const ACTIVE_FLOW: OrderStatus[] = ["confirmed", "dispatched", "picked_up", "in_transit", "arrived", "completed"];

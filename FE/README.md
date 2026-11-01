@@ -64,8 +64,8 @@ npm run dev                     # http://localhost:3000/orders
 | `/orders` 列表和详情抽屉 | 完成 |
 | `/orders/[id]/track` 倒计时、取消、进度、时间线、评价 | 完成 |
 | `/login`（Yuning） | 未做。登录成功后调用 `lib/auth.ts` 的 `setToken(access_token)`，再跳到 `next` 参数 |
-| `/ship`、`/ship/plans`（Pei） | 未做。最近 3 单请复用 `hooks/useOrders.ts` 的 `useOrders()` |
-| 地图（Pei） | `components/tracking/TrackingMap.tsx` 现在是 SVG 占位，props 已定好，换成 `components/map/` 的组件即可 |
+| `/ship`、`/ship/plans`（Pei） | 完成；视觉按 UI 设计稿 A、B，假数据模式下报价和下单走 `mock.ts`，地址补全调用真实的 Photon |
+| 地图（Pei） | 完成；`components/map/`（MapLibre + OpenFreeMap），追踪页通过 `TrackingMap` 复用。瓦片服务连不上时退回纯色底图，路线和标记照常显示 |
 
 ## 约定
 

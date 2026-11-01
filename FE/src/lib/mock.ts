@@ -24,6 +24,9 @@ import type {
   OrderStatus,
   OrderSummary,
   PositionEvent,
+  QuoteOption,
+  QuoteRequest,
+  QuoteResponse,
   Station,
   TimelineEntry,
   User,
@@ -387,7 +390,119 @@ function route(method: Method, path: string, body: unknown): unknown {
     o.detail.reviewed = true;
     return { rating, comment: o.detail.review.comment };
   }
+  if (method === "POST" && path === "/quotes") return createQuote(body as QuoteRequest);
+  if (method === "POST" && path === "/orders") {
+    return createOrder(b.quote_id as string, b.option_id as string, b.recipient as { name: string; phone: string });
+  }
   throw new MockError(404, "NOT_FOUND");
+}
+
+const quotes = new Map<string, { req: QuoteRequest; res: QuoteResponse }>();
+
+function meters(a: LatLngTuple, b: LatLngTuple) {
+  const dLat = (b[0] - a[0]) * 111_320;
+  const dLng = (b[1] - a[1]) * 111_320 * Math.cos((a[0] * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
+const pathMeters = (pts: LatLngTuple[]) => pts.slice(1).reduce((sum, p, i) => sum + meters(pts[i], p), 0);
+
+function createQuote(req: QuoteRequest): QuoteResponse {
+  const inSf = (p: { lat: number; lng: number }) => p.lat >= 37.7 && p.lat <= 37.84 && p.lng >= -122.52 && p.lng <= -122.35;
+  if (!inSf(req.pickup) || !inSf(req.dropoff)) throw new MockError(400, "OUT_OF_SERVICE_AREA");
+  if (req.pickup.lat === req.dropoff.lat && req.pickup.lng === req.dropoff.lng) throw new MockError(400, "SAME_ADDRESS");
+
+  const now = Date.now();
+  const p: LatLngTuple = [req.pickup.lat, req.pickup.lng];
+  const d: LatLngTuple = [req.dropoff.lat, req.dropoff.lng];
+  const options: QuoteOption[] = STATIONS.flatMap((st, i) =>
+    (["robot", "drone"] as const).map((type) => {
+      const s: LatLngTuple = [st.lat, st.lng];
+      // Robots turn at corners so the fake route looks like streets; drones fly straight.
+      const route: LatLngTuple[] = type === "robot" ? [s, [s[0], p[1]], p, [p[0], d[1]], d] : [s, p, d];
+      const distance = Math.round(pathMeters(route));
+      const base = { option_id: crypto.randomUUID(), station: st, device_type: type, tags: [] as QuoteOption["tags"] };
+      const out = { ...base, departs_at: null, eta_at: null, price_cents: null, distance_m: null, route_points: null };
+      const reason =
+        type === "drone" && req.weight_kg > 2
+          ? "OVERWEIGHT"
+          : type === "drone" && distance > 7500
+            ? "OUT_OF_RANGE"
+            : null;
+      if (reason) return { ...out, available: false, unavailable_reason: reason };
+
+      // The second station's drone is busy, so at least one card shows "Next free".
+      const departs = now + (type === "drone" && i === 1 ? 12 * MIN : 0);
+      const eta = departs + (distance / (type === "drone" ? 15 : 2) + (type === "drone" ? 120 : 300)) * 1000;
+      if (req.arrive_within_minutes && eta > now + req.arrive_within_minutes * MIN) {
+        return { ...out, available: false, unavailable_reason: "DEADLINE_MISSED" };
+      }
+      const miles = distance / 1609.344;
+      return {
+        ...base,
+        available: true,
+        unavailable_reason: null,
+        departs_at: iso(departs),
+        eta_at: iso(eta),
+        price_cents: Math.max(100, Math.round(req.weight_kg * miles * 100)),
+        distance_m: distance,
+        route_points: route,
+      };
+    }),
+  );
+
+  const open = options.filter((o) => o.available);
+  const time = (o: QuoteOption) => new Date(o.eta_at!).getTime();
+  const best = (cmp: (a: QuoteOption, b: QuoteOption) => number) => [...open].sort(cmp)[0];
+  if (open.length) {
+    best((a, b2) => time(a) - time(b2)).tags.push("fastest");
+    best((a, b2) => a.price_cents! - b2.price_cents!).tags.push("cheapest");
+    best((a, b2) => time(a) + a.price_cents! * 1000 - time(b2) - b2.price_cents! * 1000).tags.push("recommended");
+  }
+  const res = { quote_id: crypto.randomUUID(), expires_at: iso(now + 10 * MIN), options };
+  quotes.set(res.quote_id, { req, res });
+  return res;
+}
+
+function createOrder(quoteId: string, optionId: string, recipient: { name: string; phone: string }) {
+  const q = quotes.get(quoteId);
+  if (!q || Date.now() > new Date(q.res.expires_at).getTime()) throw new MockError(409, "QUOTE_EXPIRED");
+  const opt = q.res.options.find((o) => o.option_id === optionId);
+  if (!opt || !opt.available) throw new MockError(404, "OPTION_NOT_FOUND");
+
+  const placedAt = Date.now();
+  const station = STATIONS.find((s) => s.id === opt.station.id)!;
+  const detail = buildOrder({
+    id: crypto.randomUUID(),
+    station,
+    device: opt.device_type === "drone" ? "DRN-101" : "R-101",
+    type: opt.device_type,
+    createdAt: placedAt,
+    pickup: q.req.pickup,
+    dropoff: q.req.dropoff,
+    item: q.req.item.description,
+    weight: q.req.weight_kg,
+    recipient: recipient.name,
+    price: opt.price_cents!,
+    distance: opt.distance_m!,
+    status: "confirmed",
+  });
+  // Same 10x replay as the first order, along the quoted route.
+  detail.departs_at = iso(placedAt + LIVE_PLAN[0][1] * 1000);
+  detail.eta_at = iso(placedAt + LIVE_PLAN[3][1] * 1000);
+  detail.cancellable = true;
+  detail.route_points = opt.route_points!;
+  detail.recipient_phone = recipient.phone;
+  detail.notes = q.req.notes ?? null;
+  store().unshift({ detail, live: { placedAt } });
+  return {
+    order_id: detail.order_id,
+    status: detail.status,
+    device: detail.device,
+    price_cents: detail.price_cents,
+    departs_at: detail.departs_at,
+    eta_at: detail.eta_at,
+  };
 }
 
 /** Fake SSE for /orders/{id}/track: replays missed status events, then pushes position every second. */
