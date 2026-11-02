@@ -65,19 +65,37 @@ SkyLane/
 
 ### Demo 验收清单
 
-- [ ] `docker compose up -d` 启动数据库，后端启动时 Flyway 自动建表、DevRunner 写入种子数据
-- [ ] 后端 `skylane.sim.speed` 设成 10，一单在 3 分钟内跑完
-- [ ] 前端 `npm run dev` 启动，连上本地后端
-- [ ] 上面 7 步连续走两遍都不出错
-- [ ] 准备一组固定的演示地址，事先确认 6 个方案里至少 4 个可用
+- [x] 后端启动时 Flyway 自动建表、DevRunner 写入种子数据（已在空库上验证；`docker compose` 这一步还需要在装了 Docker 的电脑上确认一次）
+- [ ] 后端 `skylane.sim.speed` 设成 10，一单在 3 分钟内跑完：无人机约 1 分钟 ✅；机器人几公里要 5 分钟以上 ❌，演示时选无人机，或把 speed 调到 20–30
+- [x] 前端 `npm run dev` 启动，连上本地后端（`.env.example` 默认 `NEXT_PUBLIC_USE_MOCK=0`）
+- [ ] 上面 7 步连续走两遍都不出错：接口层已全部走通，**还需要在浏览器里完整彩排两遍**（Yuning 组织）
+- [x] 固定演示地址：Pickup `Ferry Building`，Delivery `Oracle Park`，6 个方案全部可用（重量 ≤ 2 kg）
+
+### 当前进度（2026-11-02，分支 `demo/round-one`，待 PR 合并）
+
+本地搭建和启动步骤见 [`docs/run-local.md`](docs/run-local.md)。测试账号 `alice@skylane.dev` / `bob@skylane.dev`，密码 `password123`。
+
+| Demo 步骤 | 前端 | 后端 | 状态 |
+|---|---|---|---|
+| 1 注册登录 | `/login` | `/auth/register`、`/auth/login`、`/me`、JWT | ✅ 完成 |
+| 2 填写寄件信息 | `/ship`、地址补全 | — | ✅ 完成 |
+| 3 比较方案 | `/ship/plans`、地图 | `/stations`、`/quotes` | ✅ 完成 |
+| 4 下单 | Place order | `POST /orders` | ✅ 完成 |
+| 5 实时追踪 | `/orders/[id]/track` | DeviceSimulator、SSE `/track` | ✅ 完成 |
+| 6 评价 | 评价表单 | `POST /orders/{id}/review` | ✅ 完成 |
+| 7 My Orders | `/orders` | `GET /orders`、种子历史订单 | ✅ 完成 |
+
+还没做（第二轮）：Google 登录、修改显示名和密码（`/account` 目前是占位页）、My Orders 搜索筛选、部署上线。
+
+**需要负责人接手 Review 的代码**：账号 `BE/.../auth/` 和 `FE/src/app/(auth)/login/`（Yuning）、订单 `BE/.../order/`（Ziyue）、模拟与追踪 `BE/.../tracking/`（Yangming，时间规则沿用了 `DeliveryTracker` / `DroneTracker` 原型）、种子数据 `DevOrderSeeder`（Shuhua）。实现上与设计文档的差异见 `docs/design.md` 的“第一轮实现说明”。
 
 ### 为了 Demo 稳定，第一轮可以先简化
 
 | 内容 | 第一轮做法 | 第二轮 |
 |---|---|---|
 | 机器人路线 | 先用 routing.openstreetmap.de（不需要 Key）；出错时退回直线，不能让报价失败 | OpenRouteService / 自部署 OSRM |
-| 实时追踪 | 能显示移动就行；如果 SSE 来不及，先用每 2 秒轮询 `GET /orders/{id}`，接口不变 | SSE + 断线重连 |
-| 登录 | 只做邮箱注册和登录 | Google 登录、修改密码、Account 页 |
+| 实时追踪 | 能显示移动就行；如果 SSE 来不及，先用每 2 秒轮询 `GET /orders/{id}`，接口不变（实际已做成 SSE + 断线补发） | SSE + 断线重连 |
+| 登录 | 只做邮箱注册和登录 | Google 登录、修改密码、Account 页（目前是占位页） |
 | My Orders | 只做列表和详情 | 搜索、筛选、排序 |
 | 取消订单 | 后端接口做好，前端放一个按钮即可 | 出发前倒计时、边界情况 |
 | 部署 | 只在本地演示 | 部署到线上 |
