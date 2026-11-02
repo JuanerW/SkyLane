@@ -10,10 +10,14 @@
     "gen:types": "node scripts/gen-types.mjs"
   },
   "dependencies": {
+    "@hookform/resolvers": "^7.0.1",
     "@tanstack/react-query": "^5.105.0",
+    "maplibre-gl": "^5.24.0",
     "next": "14.2.35",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "react-hook-form": "^7.91.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^20",
