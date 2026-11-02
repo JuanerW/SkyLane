@@ -254,6 +254,23 @@ spring.jpa.hibernate.ddl-auto: validate
 
 3 个站点（SoMa、Mission、Marina），每站 3 台机器人 + 2 架无人机；2 个测试账号，各有 3 笔已完成订单，其中 1 笔已评价。
 
+### 第一轮实现说明（与上文的差异）
+
+第一轮 Demo 的代码与本文一致，以下几处是实现时的取舍，以代码为准：
+
+| 内容 | 本文写法 | 实际实现 | 原因 |
+|---|---|---|---|
+| 包名 | `com.laioffer.skylane`，`user/` `security/` `review/` `device/` | `com.skylane`；账号在 `auth/`，评价接口并入 `order/`，模拟器在 `tracking/` | 沿用已有骨架；模块少，合并后更好找 |
+| JWT | jjwt | 自己用 JDK 的 HmacSHA256 实现 HS256（`auth/JwtService`） | 不新增依赖；只需要签发和校验 |
+| 订单读写 | Spring Data JPA | `JdbcTemplate` + SQL | 与报价模块一致；PostGIS、`FOR UPDATE SKIP LOCKED`、条件更新直接写 SQL 更清楚 |
+| 返航占用时长 | 未规定 | 收件点到站点直线距离（机器人 ×1.3）÷ 速度 | 设备回站后才能接下一单，需要一个估算 |
+| 下单时的 `eta_at` | 出发 + 行驶 + 装卸 | 同一公式，但除以 `skylane.sim.speed` | 演示时 10 倍速，页面上的到达时间要和模拟一致；speed = 1 时与报价完全相同 |
+| 收件人电话 | E.164 | 后端把 `(415) 555-0123` 这类写法规范成 `+14155550100` | 表单不要求用户输入 E.164 |
+| 新增错误码 | — | `DUPLICATE_REQUEST`（同一 Idempotency-Key 并发提交）；不可用方案下单返回 `DEVICE_UNAVAILABLE` | 补齐边界情况 |
+| `position.progress` | 进度 | 已行驶距离 ÷ 路线总长（0–1） | 前端按比例在路线或弧线上放图标 |
+| 未登录访问不存在的路径 | — | 401 而不是 404 | 除 `/auth/**` 外都要求登录，不暴露路由 |
+| 第一轮未做 | — | `/auth/google`、`PATCH /me`、`PUT /me/password`；`/account` 只有占位页（显示邮箱、退出登录） | README 第一轮简化 |
+
 ## 5. 数据库
 
 PostgreSQL 16 + PostGIS，MVP 共 11 张表。主键 UUID（order_event 用自增 bigint）；时间 `timestamptz`；坐标 `geography(Point, 4326)`；金额整数美分。

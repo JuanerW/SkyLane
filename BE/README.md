@@ -22,11 +22,7 @@ docker compose up -d
 # 连接串：jdbc:postgresql://localhost:5432/skylane  用户名 / 密码：skylane / skylane
 ```
 
-还没接 Flyway 时，可以手动执行建表脚本：
-
-```bash
-docker exec -i skylane-db psql -U skylane -d skylane < database/migration/V1__init.sql
-```
+不用手动建表：后端启动时 Flyway 自动执行 `src/main/resources/db/migration/V1__init.sql`，dev profile 再写入种子数据。完整步骤见 [`docs/run-local.md`](../docs/run-local.md)。
 
 ## 分工（第一轮）
 

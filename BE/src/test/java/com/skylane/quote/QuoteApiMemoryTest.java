@@ -80,9 +80,10 @@ class QuoteApiMemoryTest {
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.error.code").value("METHOD_NOT_ALLOWED"))
                 .andExpect(jsonPath("$.error.details").exists());
+        // Unknown paths need a login first (no route probing), and still answer with the unified body.
         mvc.perform(get("/api/v1/nope"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
     }
     @Test
     void weightPrecisionAndDroneLimitAreEnforced() throws Exception {

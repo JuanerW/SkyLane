@@ -22,6 +22,7 @@ import java.util.List;
 
 @Component
 @Profile("dev")
+@org.springframework.core.annotation.Order(1)
 @RequiredArgsConstructor
 public class DevRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DevRunner.class);

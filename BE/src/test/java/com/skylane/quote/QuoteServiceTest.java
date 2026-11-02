@@ -187,7 +187,7 @@ class QuoteServiceTest {
 
     @Test
     void withoutLoginTheDefaultProviderRefuses() {
-        assertThatThrownBy(() -> new UnauthenticatedCurrentUserProvider().currentUserId())
+        assertThatThrownBy(() -> new com.skylane.auth.SecurityCurrentUserProvider().currentUserId())
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("UNAUTHORIZED");
     }
 
