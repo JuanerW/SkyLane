@@ -22,7 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Runs with profile 'dev' (fake logged-in test user). Needs the PostGIS database with Flyway V1 and database/dev-seed-quote.sql applied. Run with
+ * Runs with profile 'dev' as the seeded user alice@skylane.dev (DevOrderSeeder). Needs the PostGIS database. Run with
  * SKYLANE_TEST_DB=1 DATABASE_URL=jdbc:postgresql://localhost:5433/skylane ./gradlew test
  */
 @EnabledIfEnvironmentVariable(named = "SKYLANE_TEST_DB", matches = ".+")
@@ -43,6 +43,17 @@ class QuoteApiTest {
     MockMvc mvc;
     @Autowired
     JdbcTemplate jdbc;
+    @Autowired
+    com.skylane.auth.JwtService jwt;
+
+    /** Bearer token of the seeded user alice@skylane.dev (DevOrderSeeder). */
+    org.springframework.test.web.servlet.request.RequestPostProcessor asAlice() {
+        java.util.UUID id = jdbc.queryForObject("SELECT id FROM app_user WHERE email = 'alice@skylane.dev'", java.util.UUID.class);
+        return req -> {
+            req.addHeader("Authorization", "Bearer " + jwt.issue(id, 0));
+            return req;
+        };
+    }
 
     static final String DEMO = """
             {"item":{"description":"Cake","fragile":true},"weight_kg":1.5,
@@ -51,7 +62,7 @@ class QuoteApiTest {
 
     @Test
     void listsThreeStationsAsAnArray() throws Exception {
-        mvc.perform(get("/api/v1/stations"))
+        mvc.perform(get("/api/v1/stations").with(asAlice()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(3))
                 .andExpect(jsonPath("$[0].code").exists())
@@ -61,7 +72,7 @@ class QuoteApiTest {
     @Test
     void createsAndPersistsQuoteWithSixOptions() throws Exception {
         int quotesBefore = jdbc.queryForObject("SELECT count(*) FROM quote", Integer.class);
-        String body = mvc.perform(post("/api/v1/quotes").contentType(MediaType.APPLICATION_JSON).content(DEMO))
+        String body = mvc.perform(post("/api/v1/quotes").with(asAlice()).contentType(MediaType.APPLICATION_JSON).content(DEMO))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.options.length()").value(6))
                 .andExpect(jsonPath("$.options[0].route_points[0].length()").value(2))
@@ -83,7 +94,7 @@ class QuoteApiTest {
                 SELECT d.id, 'maintenance', now() - interval '1 minute', now() + interval '30 minutes'
                 FROM device d JOIN station s ON s.id = d.station_id WHERE s.code = 'soma' AND d.device_type = 'drone'""");
         try {
-            String body = mvc.perform(post("/api/v1/quotes").contentType(MediaType.APPLICATION_JSON).content(DEMO))
+            String body = mvc.perform(post("/api/v1/quotes").with(asAlice()).contentType(MediaType.APPLICATION_JSON).content(DEMO))
                     .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
             java.util.List<String> departs = com.jayway.jsonpath.JsonPath.read(body,
                     "$.options[?(@.station.name=='SoMa Station' && @.device_type=='drone')].departs_at");
@@ -95,19 +106,19 @@ class QuoteApiTest {
 
     @Test
     void rejectsBadRequests() throws Exception {
-        mvc.perform(post("/api/v1/quotes").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        mvc.perform(post("/api/v1/quotes").with(asAlice()).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.error.details").exists());
-        mvc.perform(post("/api/v1/quotes").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/quotes").with(asAlice()).contentType(MediaType.APPLICATION_JSON)
                         .content(DEMO.replace("\"weight_kg\":1.5", "\"weight_kg\":0.001")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
-        mvc.perform(post("/api/v1/quotes").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/quotes").with(asAlice()).contentType(MediaType.APPLICATION_JSON)
                         .content(DEMO.replace("\"weight_kg\":1.5", "\"weight_kg\":11")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
-        mvc.perform(post("/api/v1/quotes").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/v1/quotes").with(asAlice()).contentType(MediaType.APPLICATION_JSON)
                         .content(DEMO.replace("37.7786", "37.7955").replace("-122.3893", "-122.3937")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("SAME_ADDRESS"));

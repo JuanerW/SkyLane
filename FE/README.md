@@ -39,7 +39,7 @@ npx create-next-app@14 . --ts --tailwind --app --src-dir --eslint
 ```bash
 cd FE
 npm ci
-cp .env.example .env.local      # 默认 NEXT_PUBLIC_USE_MOCK=1，用假数据
+cp .env.example .env.local      # 默认 NEXT_PUBLIC_USE_MOCK=0，连本地后端；改成 1 用假数据
 npm run dev                     # http://localhost:3000/orders
 ```
 
@@ -63,7 +63,7 @@ npm run dev                     # http://localhost:3000/orders
 | AppShell（顶部导航）+ 登录守卫 `app/(app)/layout.tsx` | 完成；没有 token 时跳 `/login?next=…` |
 | `/orders` 列表和详情抽屉 | 完成 |
 | `/orders/[id]/track` 倒计时、取消、进度、时间线、评价 | 完成 |
-| `/login`（Yuning） | 未做。登录成功后调用 `lib/auth.ts` 的 `setToken(access_token)`，再跳到 `next` 参数 |
+| `/login` | 完成：邮箱登录 / 注册切换，成功后 `setToken(access_token)` 并跳到 `next` 参数 |
 | `/ship`、`/ship/plans`（Pei） | 完成；视觉按 UI 设计稿 A、B，假数据模式下报价和下单走 `mock.ts`，地址补全调用真实的 Photon |
 | 地图（Pei） | 完成；`components/map/`（MapLibre + OpenFreeMap），追踪页通过 `TrackingMap` 复用。瓦片服务连不上时退回纯色底图，路线和标记照常显示 |
 
