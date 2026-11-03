@@ -18,10 +18,12 @@ import com.skylane.order.OrderDtos.TimelineEntry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.math.BigDecimal;
 import java.sql.ResultSet;
@@ -80,6 +82,16 @@ public class OrderService {
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Idempotency-Key header is required");
         }
+        // Serialize retries of the same user's request until commit. A concurrent retry
+        // then sees the committed order rather than racing the unique constraint.
+        jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+            try (var statement = connection.prepareStatement(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(?, 0))")) {
+                statement.setString(1, userId + ":" + idempotencyKey);
+                statement.execute();
+            }
+            return null;
+        });
         CreateOrderResponse existing = findByIdempotencyKey(userId, idempotencyKey);
         if (existing != null) {
             return existing;
@@ -106,86 +118,139 @@ public class OrderService {
         }
         QuotedOption opt = found.get(0);
         Instant now = clock.instant();
-        if (now.isAfter(opt.expiresAt())) {
+        if (!now.isBefore(opt.expiresAt())) {
             throw new ApiException(HttpStatus.CONFLICT, "QUOTE_EXPIRED", "The quote has expired");
         }
         if (!opt.available() || opt.routePoints() == null) {
             throw new ApiException(HttpStatus.CONFLICT, "DEVICE_UNAVAILABLE", "This option is not available");
         }
 
-        // Lock this station's active devices of the type; the earliest free one takes the order.
+        // Rank candidates without locking the entire fleet. Lock one at a time below.
         List<Device> devices = jdbc.query("""
                         SELECT d.id, d.code,
                                (SELECT max(b.ends_at) FROM device_block b
                                 WHERE b.device_id = d.id AND b.released_at IS NULL) AS free_at
                         FROM device d
                         WHERE d.station_id = ? AND d.device_type = ? AND d.status = 'active'
-                        ORDER BY d.code
-                        FOR UPDATE OF d SKIP LOCKED""",
+                        ORDER BY coalesce((SELECT max(b.ends_at) FROM device_block b
+                            WHERE b.device_id = d.id AND b.released_at IS NULL), '-infinity'::timestamptz), d.code""",
                 (rs, i) -> new Device(rs.getObject("id", UUID.class), rs.getString("code"), instant(rs, "free_at")),
                 opt.stationId(), opt.deviceType());
-        Device device = devices.stream()
-                .min((a, b) -> departure(a, now).compareTo(departure(b, now)))
-                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "DEVICE_UNAVAILABLE", "No device is free"));
+        for (Device candidate : devices) {
+            List<String> locked = jdbc.queryForList("""
+                    SELECT code FROM device WHERE id = ? AND status = 'active'
+                    FOR UPDATE SKIP LOCKED""", String.class, candidate.id());
+            if (locked.isEmpty()) {
+                continue;
+            }
+            // Read occupation again after acquiring the device lock: another order
+            // may have committed since the candidate list was read.
+            Instant freeAt = jdbc.queryForObject("""
+                    SELECT max(ends_at) FROM device_block
+                    WHERE device_id = ? AND released_at IS NULL""",
+                    (rs, i) -> instant(rs, 1), candidate.id());
+            Device device = new Device(candidate.id(), locked.get(0), freeAt);
+            now = clock.instant();
+            if (!now.isBefore(opt.expiresAt())) {
+                throw new ApiException(HttpStatus.CONFLICT, "QUOTE_EXPIRED", "The quote has expired");
+            }
 
-        Instant departs = departure(device, now);
-        if (opt.departsAt() != null && departs.isAfter(opt.departsAt().plus(staleTolerance))) {
-            throw new ApiException(HttpStatus.CONFLICT, "QUOTE_STALE", "Departure moved; please refresh the options");
-        }
-        List<LatLng> route = parseRoute(opt.routePoints());
-        LatLng pickup = new LatLng(opt.pickupLat(), opt.pickupLng());
-        LatLng dropoff = new LatLng(opt.dropoffLat(), opt.dropoffLng());
-        DeliveryPlan plan = new DeliveryPlan(route, pickup, opt.deviceType());
-        Instant eta = departs.plusMillis(Math.round(plan.arrivedAt() / simSpeed * 1000));
-        if (opt.deadlineAt() != null && eta.isAfter(opt.deadlineAt())) {
-            throw new ApiException(HttpStatus.CONFLICT, "DEADLINE_MISSED", "Cannot arrive before the deadline");
-        }
-        // Return trip: straight line back to the station (robots x1.3 for streets).
-        double returnM = Geo.haversineM(dropoff, route.get(0)) * ("robot".equals(opt.deviceType()) ? 1.3 : 1);
-        double returnS = returnM / ("robot".equals(opt.deviceType()) ? DeliveryPlan.ROBOT_MPS : DeliveryPlan.DRONE_MPS);
-        Instant returnEnds = eta.plusMillis(Math.max(1000, Math.round(returnS / simSpeed * 1000)));
+            Instant departs = departure(device, now);
+            if (opt.departsAt() != null && departs.isAfter(opt.departsAt().plus(staleTolerance))) {
+                throw new ApiException(HttpStatus.CONFLICT, "QUOTE_STALE", "Departure moved; please refresh the options");
+            }
+            List<LatLng> route = parseRoute(opt.routePoints());
+            LatLng pickup = new LatLng(opt.pickupLat(), opt.pickupLng());
+            LatLng dropoff = new LatLng(opt.dropoffLat(), opt.dropoffLng());
+            DeliveryPlan plan = new DeliveryPlan(route, pickup, opt.deviceType());
+            Instant eta = departs.plusMillis(Math.round(plan.arrivedAt() / simSpeed * 1000));
+            if (opt.deadlineAt() != null && eta.isAfter(opt.deadlineAt())) {
+                throw new ApiException(HttpStatus.CONFLICT, "DEADLINE_MISSED", "Cannot arrive before the deadline");
+            }
+            // Return trip: straight line back to the station (robots x1.3 for streets).
+            double returnM = Geo.haversineM(dropoff, route.get(0)) * ("robot".equals(opt.deviceType()) ? 1.3 : 1);
+            double returnS = returnM / ("robot".equals(opt.deviceType()) ? DeliveryPlan.ROBOT_MPS : DeliveryPlan.DRONE_MPS);
+            Instant returnEnds = eta.plusMillis(Math.max(1000, Math.round(returnS / simSpeed * 1000)));
 
-        UUID orderId;
-        try {
-            orderId = jdbc.queryForObject("""
-                            INSERT INTO delivery_order (user_id, quote_id, option_id, device_id, device_type,
-                                recipient_name, recipient_phone, price_cents, notes,
-                                pickup_text, pickup_location, dropoff_text, dropoff_location,
-                                route_points, departs_at, eta_at, idempotency_key, confirmed_at)
-                            SELECT ?, q.id, o.id, ?, o.device_type, ?, ?, o.price_cents, q.notes,
-                                   q.pickup_text, q.pickup_location, q.dropoff_text, q.dropoff_location,
-                                   o.route_points, ?, ?, ?, ?
-                            FROM quote q JOIN quote_option o ON o.quote_id = q.id
-                            WHERE q.id = ? AND o.id = ?
-                            RETURNING id""",
-                    UUID.class, userId, device.id(), req.recipient().name().trim(), phone,
-                    Timestamp.from(departs), Timestamp.from(eta), idempotencyKey, Timestamp.from(now),
-                    quoteId, optionId);
-        } catch (DuplicateKeyException e) {
-            // A concurrent retry with the same key won the race (D13).
-            throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_REQUEST", "This order is already being placed");
-        }
-        jdbc.update("""
-                INSERT INTO order_item (order_id, description, is_fragile, weight_kg)
-                SELECT ?, item_description, is_fragile, weight_kg FROM quote WHERE id = ?""", orderId, quoteId);
-        jdbc.update("""
-                INSERT INTO device_block (device_id, order_id, kind, starts_at, ends_at) VALUES
-                    (?, ?, 'order', ?, ?), (?, ?, 'return', ?, ?)""",
-                device.id(), orderId, Timestamp.from(departs), Timestamp.from(eta),
-                device.id(), orderId, Timestamp.from(eta), Timestamp.from(returnEnds));
-        jdbc.update("INSERT INTO order_event (order_id, status, occurred_at, actor_type, actor_id) VALUES (?, 'confirmed', ?, 'user', ?)",
-                orderId, Timestamp.from(now), userId);
+            // PostgreSQL aborts a transaction after an exclusion violation. Roll back
+            // this attempt to a savepoint before trying another device.
+            java.sql.Savepoint savepoint = jdbc.execute(
+                    (org.springframework.jdbc.core.ConnectionCallback<java.sql.Savepoint>) java.sql.Connection::setSavepoint);
+            try {
+                UUID orderId;
+                try {
+                    orderId = jdbc.queryForObject("""
+                                    INSERT INTO delivery_order (user_id, quote_id, option_id, device_id, device_type,
+                                        recipient_name, recipient_phone, price_cents, notes,
+                                        pickup_text, pickup_location, dropoff_text, dropoff_location,
+                                        route_points, departs_at, eta_at, idempotency_key, confirmed_at)
+                                    SELECT ?, q.id, o.id, ?, o.device_type, ?, ?, o.price_cents, q.notes,
+                                           q.pickup_text, q.pickup_location, q.dropoff_text, q.dropoff_location,
+                                           o.route_points, ?, ?, ?, ?
+                                    FROM quote q JOIN quote_option o ON o.quote_id = q.id
+                                    WHERE q.id = ? AND o.id = ?
+                                    RETURNING id""",
+                            UUID.class, userId, device.id(), req.recipient().name().trim(), phone,
+                            Timestamp.from(departs), Timestamp.from(eta), idempotencyKey, Timestamp.from(now),
+                            quoteId, optionId);
+                } catch (DuplicateKeyException e) {
+                    // A concurrent retry with the same key won the race (D13).
+                    throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_REQUEST", "This order is already being placed");
+                }
+                jdbc.update("""
+                        INSERT INTO order_item (order_id, description, is_fragile, weight_kg)
+                        SELECT ?, item_description, is_fragile, weight_kg FROM quote WHERE id = ?""", orderId, quoteId);
+                jdbc.update("""
+                        INSERT INTO device_block (device_id, order_id, kind, starts_at, ends_at) VALUES
+                            (?, ?, 'order', ?, ?), (?, ?, 'return', ?, ?)""",
+                        device.id(), orderId, Timestamp.from(departs), Timestamp.from(eta),
+                        device.id(), orderId, Timestamp.from(eta), Timestamp.from(returnEnds));
+                jdbc.update("INSERT INTO order_event (order_id, status, occurred_at, actor_type, actor_id) VALUES (?, 'confirmed', ?, 'user', ?)",
+                        orderId, Timestamp.from(now), userId);
 
-        return new CreateOrderResponse(orderId.toString(), "confirmed",
-                new DeviceRef(device.code(), opt.deviceType()), opt.priceCents(), departs, eta);
+                return new CreateOrderResponse(orderId.toString(), "confirmed",
+                        new DeviceRef(device.code(), opt.deviceType()), opt.priceCents(), departs, eta);
+            } catch (DataIntegrityViolationException e) {
+                jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+                    connection.rollback(savepoint);
+                    return null;
+                });
+                if (!isDeviceOverlap(e)) {
+                    throw e;
+                }
+            } finally {
+                jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
+                    connection.releaseSavepoint(savepoint);
+                    return null;
+                });
+            }
+        }
+        throw new ApiException(HttpStatus.CONFLICT, "DEVICE_UNAVAILABLE", "No device is available; please retry");
+    }
+
+    private static boolean isDeviceOverlap(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SQLException sql && "23P01".equals(sql.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Instant instant(ResultSet rs, int column) throws SQLException {
+        Timestamp t = rs.getTimestamp(column);
+        return t == null ? null : t.toInstant();
     }
 
     public List<OrderSummary> list(UUID userId, int limit) {
         return jdbc.query("SELECT " + SUMMARY_COLUMNS + " FROM delivery_order o WHERE o.user_id = ? "
-                        + "ORDER BY o.created_at DESC LIMIT ?",
+                        + "ORDER BY o.created_at DESC, o.id DESC LIMIT ?",
                 (rs, i) -> summary(rs), userId, Math.max(1, Math.min(limit, 100)));
     }
 
+    // Details, review and timeline must come from one database snapshot, even
+    // when the simulator advances the order or a review arrives during this read.
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public OrderDetail get(UUID userId, UUID orderId) {
         List<OrderDetail> rows = jdbc.query("SELECT " + SUMMARY_COLUMNS + """
                         , o.recipient_phone, o.notes, o.route_points::text AS route, o.canceled_at, o.cancel_reason,
@@ -253,32 +318,45 @@ public class OrderService {
     /** D11: only before departure; the WHERE clause decides races with the simulator. */
     @Transactional
     public Map<String, String> cancel(UUID userId, UUID orderId, String reason) {
-        requireOwned(userId, orderId);
+        // Acquire the row before checking the deadline. PostgreSQL now() is fixed
+        // at transaction start, so a lock wait must not extend the cancel window.
+        List<String> owned = jdbc.queryForList("""
+                SELECT status FROM delivery_order WHERE id = ? AND user_id = ? FOR UPDATE""",
+                String.class, orderId, userId);
+        if (owned.isEmpty()) {
+            throw notFound();
+        }
         boolean ok = stateMachine.transition(orderId, "confirmed", "canceled", clock.instant(), "user", userId,
-                " AND departs_at > now()");
+                " AND departs_at > clock_timestamp()");
         if (!ok) {
             throw new ApiException(HttpStatus.CONFLICT, "NOT_CANCELLABLE", "The device has already departed");
         }
-        jdbc.update("UPDATE delivery_order SET cancel_reason = ? WHERE id = ?", reason, orderId);
+        String normalizedReason = reason == null || reason.isBlank() ? null : reason.trim();
+        jdbc.update("UPDATE delivery_order SET cancel_reason = ? WHERE id = ?", normalizedReason, orderId);
         jdbc.update("UPDATE device_block SET released_at = now() WHERE order_id = ? AND released_at IS NULL", orderId);
         return Map.of("status", "canceled");
     }
 
     @Transactional
     public Review review(UUID userId, UUID orderId, int rating, String comment) {
+        if (rating < 1 || rating > 5 || (comment != null && comment.length() > 1000)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                    "rating must be 1-5 and comment must be at most 1000 characters");
+        }
         if (!"completed".equals(requireOwned(userId, orderId))) {
             throw new ApiException(HttpStatus.CONFLICT, "NOT_COMPLETED", "Only completed orders can be reviewed");
         }
         String text = comment == null || comment.isBlank() ? null : comment.trim();
-        try {
-            Timestamp created = jdbc.queryForObject("""
-                            INSERT INTO delivery_review (order_id, user_id, rating, comment) VALUES (?, ?, ?, ?)
-                            RETURNING created_at""",
-                    Timestamp.class, orderId, userId, rating, text);
-            return new Review(rating, text, created.toInstant());
-        } catch (DuplicateKeyException e) {
+        // A conflict is an expected business outcome, not a failed PostgreSQL
+        // transaction. The unique order_id constraint also resolves concurrent reviews.
+        List<Instant> created = jdbc.query("""
+                INSERT INTO delivery_review (order_id, user_id, rating, comment) VALUES (?, ?, ?, ?)
+                ON CONFLICT (order_id) DO NOTHING RETURNING created_at""",
+                (rs, i) -> instant(rs, "created_at"), orderId, userId, rating, text);
+        if (created.isEmpty()) {
             throw new ApiException(HttpStatus.CONFLICT, "ALREADY_REVIEWED", "This order has already been reviewed");
         }
+        return new Review(rating, text, created.get(0));
     }
 
     public List<LatLng> parseRoute(String json) {

@@ -46,8 +46,14 @@ public class OrderController {
     }
 
     @GetMapping
-    public List<OrderSummary> list(@RequestParam(defaultValue = "100") int limit) {
-        return orders.list(currentUser.currentUserId(), limit);
+    public List<OrderSummary> list(@RequestParam(name = "limit", defaultValue = "100") String limit) {
+        final int requestedLimit;
+        try {
+            requestedLimit = Integer.parseInt(limit);
+        } catch (NumberFormatException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "limit must be a 32-bit integer");
+        }
+        return orders.list(currentUser.currentUserId(), requestedLimit);
     }
 
     @GetMapping("/{id}")

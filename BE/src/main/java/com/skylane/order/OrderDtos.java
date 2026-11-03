@@ -1,5 +1,7 @@
 package com.skylane.order;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -62,6 +64,7 @@ public final class OrderDtos {
     public record CancelRequest(@Size(max = 200) String reason) {
     }
 
-    public record ReviewRequest(@NotNull @Min(1) @Max(5) Integer rating, @Size(max = 1000) String comment) {
+    public record ReviewRequest(@JsonDeserialize(using = ReviewRatingDeserializer.class)
+                                @NotNull @Min(1) @Max(5) Integer rating, @Size(max = 1000) String comment) {
     }
 }
