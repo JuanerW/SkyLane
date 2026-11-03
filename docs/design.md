@@ -327,6 +327,167 @@ MVP 只依赖 4 个外部服务，全部免费。额度来自各家官网的公�
 
 ## 7. 后续阶段
 
+Smart Recommendation、Agent Mode 已细化到第 8 节，作为第二阶段的一部分。
+
 - **Smart Recommendation**：`POST /ai/recommendation`，结合风速（Open-Meteo）、排队情况和用户备注，由 Claude API 给出推荐理由；新增 recommendation 表。
 - **Agent Mode**：`POST /agent/chat`（SSE）+ 确认接口，对话式下单；新增 conversation、conversation_message、agent_action 表。
 - **其他**：支付和 Checkout、重置密码（需要邮件服务）、收件人免登录追踪链接、接真实设备（启用 location_event 存 GPS 轨迹）。
+
+## 8. 第二阶段设计（增量）
+
+第二阶段做 5 块：运营方账号与后台监控、推荐与 Agent、账号完善、预约下单、主页与 UI。原则是**只做增量**：已有接口的请求和响应只加可选字段，不改不删；数据库改动全部放在新的 Flyway 脚本 `V2__phase_two.sql` 里，不修改已执行的 `V1`。
+
+### 8.1 运营方账号与后台监控
+
+机器人或无人机公司（运营方）有自己的账号，可以管理自己的设备，并在后台监控设备和订单。
+
+| # | 问题 | 决定 | 理由 |
+|---|---|---|---|
+| D27 | 角色怎么表示 | `app_user.role` 取 `customer`（默认）/ `operator` / `admin`。operator 必须属于一个 `operator`（公司），admin 是平台管理员，能看全部数据。 | 一个字段就够，不需要 RBAC 表。 |
+| D28 | 角色放不放进 JWT | 不放。JwtAuthFilter 本来每次都查 `app_user`（校验 token_version），顺便读出 role 和 operator_id。 | 改角色立即生效，不用重新登录。 |
+| D29 | 运营方能看到什么 | 只能看到 `device.operator_id` 是自己公司的设备，以及由这些设备执行的订单。收件人电话在后台只显示后 4 位。 | 运营方不是平台方，按最小权限处理用户数据。 |
+| D30 | 设备能不能删除 | 不删，只能停用（`status = 'maintenance'` 或 `'offline'`）。停用时如果还有未释放的未来占用，返回 409 `DEVICE_HAS_BOOKINGS`，需要先取消或改派这些订单。 | 历史订单要能查到设备；避免已预约的订单突然没车。 |
+| D31 | 设备实时状态从哪来 | 不新增存储。由 `device_block` 加当前时间算出：`idle` / `on_order` / `returning` / 停用状态，位置沿用 D15 的计算。 | 与 D15 一致，不改模拟器。 |
+| D32 | 后台怎么实时刷新 | 一条 SSE `/ops/live`，每 2 秒推一次可见范围内所有设备的状态和位置。 | 复用 TrackingService，不需要每个订单开一条流。 |
+| D33 | 运营方账号怎么开通 | 由 admin 在后台创建公司并邀请（直接创建账号、设初始密码），不开放自助注册。dev 环境种子数据加 1 个 admin 和 1 个 operator 账号。 | MVP 没有邮件服务，也不需要审核流程。 |
+
+接口（前缀 `/api/v1/ops`，需要 operator 或 admin；customer 访问返回 403 `FORBIDDEN`）：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/ops/overview` | 各站点设备数量（idle / on_order / returning / 停用）、今日订单数、进行中订单数 |
+| SSE | `/ops/live` | `devices` 事件：[{device_id, code, state, lat, lng, order_id?}] |
+| GET | `/ops/devices` | 设备列表，含实时状态和未来占用数 |
+| POST | `/ops/devices` | code, station_id, device_type → 201；admin 需额外传 operator_id |
+| PATCH | `/ops/devices/{id}` | status、station_id；有未来占用时改站点或停用返回 409 `DEVICE_HAS_BOOKINGS` |
+| GET | `/ops/devices/{id}/schedule` | 这台设备今天和未来的占用（order / return），供预约排班查看 |
+| GET | `/ops/orders?status=&from=&to=` | 可见范围内的订单 |
+| GET | `/ops/metrics?from=&to=` | 准点率（completed_at ≤ eta_at）、平均配送时长、评分分布、设备利用率 |
+| POST | `/admin/operators` | 仅 admin：创建公司 |
+| POST | `/admin/users` | 仅 admin：创建 operator 账号 |
+| PATCH | `/admin/users/{id}` | 仅 admin：禁用（`disabled_at`）、强制下线（`token_version` 加 1） |
+
+前端新增 `/ops` 路由组（同一个 Next.js 项目）：总览（地图 + 数量卡片）、设备、订单、指标。地图复用 `components/map/`。顶部导航按 role 显示 Ops 入口。
+
+### 8.2 推荐与 Agent
+
+沿用第 7 节的方向，具体化如下。模型用 Claude API，Key 只放在后端（`ANTHROPIC_API_KEY`）。
+
+| # | 问题 | 决定 | 理由 |
+|---|---|---|---|
+| D34 | 推荐由谁算 | 规则先选出推荐方案（例如满足时限里最便宜的，或最快的），LLM 只负责写一两句推荐理由。LLM 不可用时只显示规则结果，不影响下单。 | 结果稳定、可测试；LLM 只是锦上添花。 |
+| D35 | 推荐要考虑什么 | 价格、到达时间、排队（departs_at）、用户备注；风速用 Open-Meteo，风大时降低无人机排序。 | 第一版的 D20 不考虑风速，第二阶段补上。 |
+| D36 | Agent 能不能直接下单 | 不能。Agent 只能报价、查询、提出下单建议，生成一条 `agent_action`（待确认），用户在卡片上点确认后，后端才调用现有下单逻辑，Idempotency-Key 就用 action id。 | 下单是有后果的操作，必须由用户确认；重复确认也不会生成两单。 |
+| D37 | Agent 能用哪些工具 | `search_address`（Photon）、`create_quote`、`get_order`、`list_orders`、`propose_order`、`cancel_order`（同样需要确认）。全部以当前用户身份执行，复用现有 Service 的权限检查。 | 不给 Agent 额外权限。 |
+| D38 | 提示注入和成本 | 用户备注、地址文本只作为数据传给模型；每个用户每天消息数和 token 有上限（配置项），超出返回 429 `RATE_LIMITED`。 | 防止滥用和费用失控。 |
+
+接口：
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/quotes/{id}/recommendation` | 201 {option_id, reason, factors}；同一报价重复调用返回缓存结果 |
+| POST | `/agent/conversations` | 201 {conversation_id} |
+| POST | `/agent/conversations/{id}/messages` | 请求 {text}；SSE 返回 `delta`（文字）、`action`（待确认的操作卡片）、`done` |
+| GET | `/agent/conversations/{id}` | 历史消息和操作 |
+| POST | `/agent/actions/{id}/confirm` | 执行操作，返回结果（例如订单）；过期或已执行返回 409 `ACTION_NOT_PENDING` |
+| POST | `/agent/actions/{id}/reject` | 放弃操作 |
+
+`/quotes` 的响应只新增可选字段 `recommended_option_id`，不改已有字段。前端：方案页显示推荐标签和理由；新增 `/assistant` 聊天页，操作卡片复用方案卡片组件。
+
+运营方后台可以再加一个只读的运营助手（例如“现在哪个站最忙”“总结今天的延误”），工具只读，放在本阶段最后视时间决定。
+
+### 8.3 登录与 Account（按第 2–4 节完成）
+
+设计不变，第二阶段把第一轮没做的部分做完：Google 登录（D3）、`PATCH /me`、`PUT /me/password`（D2、D4）、`/account` 页面。数据库已有 `google_sub` 和 `token_version`，不需要改表。新增两点：
+
+- `GET /me` 响应新增 `role`、`operator_id`，前端据此显示 Ops 入口。
+- 被禁用的账号（`disabled_at` 不为空）登录返回 403 `ACCOUNT_DISABLED`。
+
+### 8.4 预约下单
+
+用户可以预约某个时间之后再取件（例如“下午 3 点以后来取”）。系统要提前占住设备，并保证同一台设备的时间不冲突。
+
+| # | 问题 | 决定 | 理由 |
+|---|---|---|---|
+| D39 | 用户怎么指定时间 | `/quotes` 新增可选字段 `pickup_after`（ISO 时间）。空 = 现在。最多提前 7 天，必须在服务时间内（配置项）。 | 只加一个字段；与 `arrive_within_minutes` 可以同时用，截止时间从 pickup_after 起算。 |
+| D40 | 一单占用设备多久 | 预测时长 = 去取件点 + 取件停留 + 送件 + 卸货 + 返航（第一轮已有的公式），再乘以安全系数 `1 + buffer-ratio`（默认 0.2），最少加 `min-buffer-minutes`（默认 5）。整段写进 `device_block`。 | 真实设备会慢于估算；预留余量，后面的预约才不会被拖累。 |
+| D41 | 冲突怎么防 | 继续靠 `device_block_no_overlap` 排斥约束，数据库层面保证同一设备时间不重叠。 | V1 已有，不用改。 |
+| D42 | 怎么找空闲设备 | 从“排在最后一单之后”改为**找空档**：在站点同类设备里，找最早能完整放下 [出发, 返航结束 + 余量] 的空档（可以插在两单之间）。仍然 `FOR UPDATE SKIP LOCKED`；插入时撞上排斥约束则换下一台设备。 | 有了预约以后，设备未来会有不连续的占用，只看最后一单会浪费空档、或把即时单排得太晚。 |
+| D43 | 预约单在等待期间怎么显示 | 沿用 D17：显示 Scheduled 和出发倒计时，出发前都可以取消；取消时把 `device_block.released_at` 设为当前时间，空档可以被别人使用。 | 不新增状态，状态机不变。 |
+| D44 | 前一单延误了怎么办 | 模拟器里不会延误。接真实设备后，前一单超出占用时，后台标红并提示运营方改派；自动改派放到以后。 | MVP 先保证可见，不做复杂调度。 |
+
+数据和接口改动：
+
+- `quote` 新增 `pickup_after timestamptz`（可空）。
+- `quote_option`、`delivery_order` 不改：`departs_at` 本来就是计划出发时间，预约单只是这个时间在未来。
+- `GET /orders` 不变，前端用 `departs_at > now()` 区分预约中的订单。
+- 新增错误码 `PICKUP_TIME_INVALID`（过去的时间、超过 7 天、不在服务时间）。
+- 配置：`skylane.booking: { max-days-ahead: 7, buffer-ratio: 0.2, min-buffer-minutes: 5, service-hours: "08:00-20:00" }`。
+
+### 8.5 主页与整体 UI
+
+- 新增公开主页 `/`：产品介绍、站点和服务范围地图、“开始寄件”按钮（未登录跳到 `/login?next=/ship`）。已登录用户访问 `/` 仍显示主页，导航里有 New Delivery 入口。
+- `GET /stations` 对未登录用户开放（主页地图要用），其余接口仍需登录。
+- 统一导航、配色和组件；补齐加载、空状态和错误提示；手机宽度可用。
+- 不改接口和数据库。
+
+### 8.6 数据库增量（V2__phase_two.sql，已完成）
+
+```sql
+CREATE TABLE operator (
+    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name       text        NOT NULL UNIQUE,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE app_user ADD COLUMN role text NOT NULL DEFAULT 'customer'
+    CHECK (role IN ('customer', 'operator', 'admin'));
+ALTER TABLE app_user ADD COLUMN operator_id uuid REFERENCES operator (id);
+ALTER TABLE app_user ADD CONSTRAINT app_user_operator_chk
+    CHECK ((role = 'operator') = (operator_id IS NOT NULL));
+
+ALTER TABLE device ADD COLUMN operator_id uuid REFERENCES operator (id);  -- 种子数据回填为默认公司
+ALTER TABLE quote  ADD COLUMN pickup_after timestamptz;
+
+CREATE TABLE recommendation (
+    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    quote_id   uuid        NOT NULL UNIQUE REFERENCES quote (id),
+    option_id  uuid        NOT NULL,
+    reason     text        NOT NULL,
+    factors    jsonb       NOT NULL,
+    model      text,                                  -- 空 = 只用了规则
+    created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (quote_id, option_id) REFERENCES quote_option (quote_id, id)
+);
+
+CREATE TABLE conversation (
+    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    uuid        NOT NULL REFERENCES app_user (id),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE conversation_message (
+    id              bigserial   PRIMARY KEY,
+    conversation_id uuid        NOT NULL REFERENCES conversation (id),
+    role            text        NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),
+    content         jsonb       NOT NULL,
+    input_tokens    int,
+    output_tokens   int,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ON conversation_message (conversation_id, id);
+
+CREATE TABLE agent_action (
+    id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    conversation_id uuid        NOT NULL REFERENCES conversation (id),
+    kind            text        NOT NULL CHECK (kind IN ('place_order', 'cancel_order')),
+    payload         jsonb       NOT NULL,
+    status          text        NOT NULL DEFAULT 'pending'
+                                CHECK (status IN ('pending', 'confirmed', 'rejected', 'expired', 'failed')),
+    result          jsonb,
+    expires_at      timestamptz NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+```
+
+V1 的 11 张表都保留，第二阶段新增 5 张表（operator、recommendation、conversation、conversation_message、agent_action），给 3 张已有的表加列（app_user、device、quote）。

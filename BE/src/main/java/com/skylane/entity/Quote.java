@@ -56,6 +56,10 @@ public class Quote extends BaseEntity {
 
     @Column(name = "algorithm_version", columnDefinition = "text")
     private String algorithmVersion;
+
+    /** Booked pickup time (design.md D39); null = now. */
+    @Column(name = "pickup_after")
+    private Instant pickupAfter;
 }
 
 

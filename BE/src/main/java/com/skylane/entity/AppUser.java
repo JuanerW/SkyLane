@@ -33,6 +33,15 @@ public class AppUser extends BaseEntity {
 
     @Column(name = "disabled_at")
     private Instant disabledAt;
+
+    @Convert(converter = UserRoleConverter.class)
+    @Column(nullable = false, columnDefinition = "text")
+    private UserRole role = UserRole.CUSTOMER;
+
+    /** Set only when role = OPERATOR (app_user_operator_chk). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "operator_id")
+    private Operator operator;
 }
 
 

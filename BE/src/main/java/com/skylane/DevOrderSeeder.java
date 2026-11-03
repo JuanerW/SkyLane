@@ -19,7 +19,8 @@ import java.util.UUID;
 
 /**
  * Dev only, runs after DevRunner (stations, devices): 2 test accounts, each with 3 completed orders,
- * 1 of them reviewed (design.md, demo data). Password for both: password123. Skips users that already exist.
+ * 1 of them reviewed (design.md, demo data). Phase two adds an admin and an operator account without orders
+ * (design.md 8.1). Password for all: password123. Skips users that already exist.
  */
 @Component
 @Profile("dev")
@@ -60,7 +61,21 @@ public class DevOrderSeeder implements ApplicationRunner {
             }
             users++;
         }
+        users += seedStaff("admin@skylane.dev", "Admin", "admin", null);
+        UUID operatorId = jdbc.queryForObject("SELECT id FROM operator WHERE name = ?", UUID.class, DevRunner.DEFAULT_OPERATOR);
+        users += seedStaff("ops@skylane.dev", "Fleet Ops", "operator", operatorId);
         log.info("Development users ready: {} new (password '{}')", users, PASSWORD);
+    }
+
+    private int seedStaff(String email, String name, String role, UUID operatorId) {
+        if (!jdbc.queryForList("SELECT 1 FROM app_user WHERE email = ?", email).isEmpty()) {
+            return 0;
+        }
+        UUID userId = jdbc.queryForObject(
+                "INSERT INTO app_user (email, display_name, role, operator_id) VALUES (?, ?, ?, ?) RETURNING id",
+                UUID.class, email, name, role, operatorId);
+        jdbc.update("INSERT INTO user_credential (user_id, password_hash) VALUES (?, ?)", userId, encoder.encode(PASSWORD));
+        return 1;
     }
 
     private static List<PastOrder> history() {
