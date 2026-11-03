@@ -110,7 +110,7 @@ SkyLane/
 
 ### 公共基础：数据库（✅ 已完成）
 
-- `BE/src/main/resources/db/migration/V2__phase_two.sql`：新增 `operator`、`recommendation`、`conversation`、`conversation_message`、`agent_action` 5 张表；`app_user` 加 `role`、`operator_id`，`device` 加 `operator_id`，`quote` 加 `pickup_after`。
+- `BE/src/main/resources/db/migration/V2__phase_two.sql`：新增 `operator`、`recommendation`、`conversation`、`conversation_message`、`agent_action` 5 张表；`app_user` 加 `role`、`operator_id`，`device` 加 `operator_id`，`quote` 加 `pickup_after`。`V3__phase_two_indexes.sql`：第二阶段查询用的 4 个索引。
 - 对应的 Entity 和 Repository 已加好。
 - 种子数据：默认运营方 `SkyLane Fleet`（拥有全部 15 台设备）；新增 `admin@skylane.dev`（管理员）和 `ops@skylane.dev`（运营方），密码都是 `password123`。
 - 已在旧库升级和全新空库两种情况下验证。
