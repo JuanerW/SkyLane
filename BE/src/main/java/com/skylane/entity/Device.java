@@ -42,6 +42,11 @@ public class Device extends BaseEntity {
 
     @Column(name = "last_seen_at")
     private Instant lastSeenAt;
+
+    /** Null = run by the platform itself. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "operator_id")
+    private Operator operator;
 }
 
 

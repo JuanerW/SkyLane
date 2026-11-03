@@ -67,6 +67,7 @@ JWT_SECRET=any-long-random-string-for-local-dev ./gradlew bootRun --args="--skyl
 | 站点 | SoMa、Mission、Marina 三个站 |
 | 设备 | 每站 3 台机器人 + 2 架无人机，共 15 台 |
 | 测试账号 | `alice@skylane.dev`、`bob@skylane.dev`，密码都是 `password123` |
+| 第二阶段账号 | `admin@skylane.dev`（管理员）、`ops@skylane.dev`（运营方 SkyLane Fleet），密码同上；后台页面开发中 |
 | 历史订单 | 每个测试账号 3 笔已完成订单，其中 1 笔已评价（Demo 第 7 步用） |
 
 ## 3. 启动前端

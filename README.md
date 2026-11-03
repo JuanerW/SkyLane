@@ -71,7 +71,7 @@ SkyLane/
 - [ ] 上面 7 步连续走两遍都不出错：接口层已全部走通，**还需要在浏览器里完整彩排两遍**（Yuning 组织）
 - [x] 固定演示地址：Pickup `Ferry Building`，Delivery `Oracle Park`，6 个方案全部可用（重量 ≤ 2 kg）
 
-### 当前进度（2026-11-02，分支 `demo/round-one`，待 PR 合并）
+### 当前进度（2026-11-02，已合并到 `main`）
 
 本地搭建和启动步骤见 [`docs/run-local.md`](docs/run-local.md)。测试账号 `alice@skylane.dev` / `bob@skylane.dev`，密码 `password123`。
 
@@ -102,53 +102,59 @@ SkyLane/
 
 不在 Demo 脚本里的功能，第一轮都可以不做。
 
-## 分工（围绕 Demo 规划）
+## 第二阶段：分工
 
-规划思路：
-- **前端是瓶颈**：2 个人要做 5 个页面加地图组件。后端有 5 个人，其中账号模块在 Demo 范围内（只有邮箱注册、登录）工作量最轻。
-- 所以由 **Yuning 端到端负责账号**：后端接口加前端 `/login` 页面，同时担任 **Demo 联调负责人**，减轻前端压力。
-- 每个人都对应 Demo 脚本里的具体步骤，自己那几步跑不通就是没完成。
+第一轮 Demo 已完成并合并到 `main`。第二阶段按功能分成下面 5 个区块，每个区块端到端负责（后端 + 前端），开工前在群里认领。详细设计见 [`docs/design.md` 第 8 节](docs/design.md#8-第二阶段设计增量)。
 
-### 后端（API + 数据库）
+**原则**：只做增量。已有接口只加可选字段，不改不删；数据库改动只在新的 Flyway 脚本里做，不修改 `V1`。
 
-| 成员 | 负责 | Demo 第一轮交付 | 对应 Demo 步骤 |
-|---|---|---|---|
-| **Shuhua Zhang** | 数据库与工程底座 | Spring Boot 项目骨架；Flyway 接入 `V1__init.sql`；全部 Entity 和 Repository；DevRunner 种子数据（3 站点、15 台设备、2 个测试账号各带 3 笔已完成订单）；统一错误体；springdoc 生成 OpenAPI | 全部（底座），第 7 步的历史订单 |
-| **Yuning Cao** | 账号（前后端）+ Demo 联调负责人 | 后端：JWT、`POST /auth/register`、`POST /auth/login`、`GET /me`、CORS。前端：`/login` 页面、登录状态保存。联调：`.env.example`、一键启动说明、组织两次完整彩排并记录问题 | 第 1 步；整场 Demo 彩排 |
-| **Zhuonan Yu** | 报价 | `GET /stations`、`POST /quotes`；路线（routing.openstreetmap.de，出错退回直线）；定价；超重、陡坡、航程；最早出发和到达时间；**准备一组固定的演示地址**，保证 6 个方案里至少 4 个可用 | 第 3 步 |
-| **Ziyue Wang** | 订单 | `POST /orders`（事务、锁设备、写占用、幂等）；`GET /orders`、`GET /orders/{id}`（含时间线）；OrderStateMachine；`POST /orders/{id}/review`；`POST /orders/{id}/cancel` | 第 4、6、7 步 |
-| **Yangming Tang** | 模拟与追踪 | DeviceSimulator（支持 10 倍速）；按路线和时间计算位置；`GET /orders/{id}/track`（SSE）。**保底方案**：如果 SSE 在联调前跑不稳，在 `GET /orders/{id}` 里加 `position` 字段供前端轮询，并同步更新 `docs/design.md` | 第 5 步 |
+### 公共基础：数据库（✅ 已完成）
 
-### 前端
+- `BE/src/main/resources/db/migration/V2__phase_two.sql`：新增 `operator`、`recommendation`、`conversation`、`conversation_message`、`agent_action` 5 张表；`app_user` 加 `role`、`operator_id`，`device` 加 `operator_id`，`quote` 加 `pickup_after`。
+- 对应的 Entity 和 Repository 已加好。
+- 种子数据：默认运营方 `SkyLane Fleet`（拥有全部 15 台设备）；新增 `admin@skylane.dev`（管理员）和 `ops@skylane.dev`（运营方），密码都是 `password123`。
+- 已在旧库升级和全新空库两种情况下验证。
 
-| 成员 | 负责 | Demo 第一轮交付 | 对应 Demo 步骤 |
-|---|---|---|---|
-| **Zhiyuan Wang** | 前端底座、订单、追踪（兼前端协调） | Next.js 项目骨架；`lib/api.ts`、`lib/sse.ts`、`lib/time.ts`；从 OpenAPI 生成类型；顶部导航和登录守卫；`/orders`（列表和详情）；`/orders/[id]/track`（状态时间线、评价表单，地图用 Pei 的组件） | 第 5、6、7 步 |
-| **Pei Li** | 下单流程与地图 | `/ship`（表单、Photon 地址补全、寄件草稿）；`/ship/plans`（6 张方案卡片、Place order）；地图组件 `components/map/`（站点、路线、机器人沿路移动、无人机弧线），追踪页复用 | 第 2、3、4、5 步 |
+### 区块 1：运营方账号与后台监控（design 8.1，D27–D33）
 
-### 时间安排（按 8 个工作日，可按实际截止日期等比例压缩）
+| 端 | 要做 |
+|---|---|
+| 后端 | JwtAuthFilter 读出 `role`；`/ops/**`、`/admin/**` 鉴权（customer 返回 403）；设备管理（新增、停用、换站，有未来占用时返回 409 `DEVICE_HAS_BOOKINGS`）；`/ops/overview`、`/ops/live`（SSE）、`/ops/orders`、`/ops/metrics`；admin 创建公司和运营账号、禁用用户 |
+| 前端 | `/ops` 路由组：总览（实时地图 + 数量卡片）、设备、订单、指标；导航按角色显示 Ops 入口 |
 
-| 阶段 | 天数 | 要做到 | 关键人 |
-|---|---|---|---|
-| 定契约 | 第 1–2 天 | 后端每人写好 Controller 和 DTO，先返回假数据，OpenAPI 可以访问；**Shuhua 第 2 天前完成数据库和种子数据**；前端骨架和 `lib/api.ts` 就绪 | Shuhua、Zhiyuan |
-| 各自实现 | 第 3–5 天 | 后端把假数据换成真实逻辑；前端对着假数据做完所有页面；Pei 的地图组件可用 | 全员 |
-| 联调 | 第 6 天 | 前端全部切到真实接口，Demo 7 步能从头走到尾 | Yuning 组织 |
-| 彩排 | 第 7 天 | 完整彩排两次，修掉所有阻塞问题，冻结代码 | Yuning 组织 |
-| Demo | 第 8 天 | 演示 | 全员 |
+### 区块 2：推荐与 Agent（design 8.2，D34–D38）
 
-### 关键路径和风险
+| 端 | 要做 |
+|---|---|
+| 后端 | `POST /quotes/{id}/recommendation`（规则选方案，Claude 写理由，失败时只用规则）；`/agent/conversations` 及消息 SSE；工具调用；`agent_action` 确认和拒绝；用户每日限额 |
+| 前端 | 方案页推荐标签和理由；`/assistant` 聊天页，下单和取消必须在操作卡片上点确认 |
 
-```
-Shuhua（数据库、种子数据）──▶ Yuning（登录）──▶ Zhuonan（报价）──▶ Ziyue（下单）──▶ Yangming（模拟、追踪）
-                                                      │                   │                  │
-前端：Pei（/ship、/ship/plans、地图）──────────────────┘                   │                  │
-      Zhiyuan（/orders、追踪页）────────────────────────────────────────────┴──────────────────┘
-```
+### 区块 3：登录与 Account（design 8.3）
 
-- **Shuhua 的数据库**是所有人的前提，第 2 天必须完成。
-- **Ziyue 的下单事务**和 **Yangming 的模拟器**是后端最复杂的两块，第 4 天要能用假数据跑通，留出联调时间。
-- **Pei 的地图组件**同时被方案页和追踪页使用，第 5 天前要能用。
-- 卡住超过半天，在群里说出来，由 Yuning 协调别人帮忙。
+| 端 | 要做 |
+|---|---|
+| 后端 | `POST /auth/google`、`PATCH /me`、`PUT /me/password`；`/me` 返回 `role`；禁用账号登录返回 403 `ACCOUNT_DISABLED` |
+| 前端 | 登录页 Google 按钮；完整的 `/account` 页面（替换现在的占位页） |
+
+### 区块 4：预约下单（design 8.4，D39–D44）
+
+| 端 | 要做 |
+|---|---|
+| 后端 | 报价支持 `pickup_after`；占用时长加安全余量；下单从“排在最后一单之后”改为按空档分配设备；新错误码 `PICKUP_TIME_INVALID` |
+| 前端 | `/ship` 加取件时间选择；My Orders 和追踪页显示预约中的订单 |
+
+### 区块 5：主页与整体 UI 优化
+
+| 端 | 要做 |
+|---|---|
+| 前端 | 新的主页 `/`（产品介绍、站点和服务范围地图、“开始寄件”入口，未登录也能看）；统一导航、配色和组件样式；加载、空状态和错误提示；手机宽度适配；My Orders 搜索和筛选 |
+| 后端 | 主页需要的公开接口（如 `GET /stations` 对未登录开放），按需加 |
+
+### 顺序和依赖
+
+1. 区块 1 的角色鉴权最先合并，区块 2、3 都会用到 `role`。
+2. 区块 4 改动下单分配逻辑，和区块 2 的 Agent 下单有关，先于 Agent 联调完成。
+3. 区块 5 可以和其他区块并行，最后统一过一遍样式。
 
 ## 协作约定
 

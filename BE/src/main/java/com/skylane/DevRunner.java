@@ -3,8 +3,10 @@ package com.skylane;
 import com.skylane.entity.Device;
 import com.skylane.entity.DeviceStatus;
 import com.skylane.entity.DeviceType;
+import com.skylane.entity.Operator;
 import com.skylane.entity.Station;
 import com.skylane.repository.DeviceRepository;
+import com.skylane.repository.OperatorRepository;
 import com.skylane.repository.StationRepository;
 import lombok.RequiredArgsConstructor;
 import org.locationtech.jts.geom.Coordinate;
@@ -31,12 +33,21 @@ public class DevRunner implements ApplicationRunner {
 
     private final StationRepository stationRepository;
     private final DeviceRepository deviceRepository;
+    private final OperatorRepository operatorRepository;
+
+    /** Seed operator company that owns all demo devices (design.md 8.1). */
+    public static final String DEFAULT_OPERATOR = "SkyLane Fleet";
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
         int stationsCreated = 0;
         int devicesCreated = 0;
+        Operator operator = operatorRepository.findByName(DEFAULT_OPERATOR).orElseGet(() -> {
+            Operator o = new Operator();
+            o.setName(DEFAULT_OPERATOR);
+            return operatorRepository.save(o);
+        });
 
         for (StationSeed seed : stationSeeds()) {
             Station station = stationRepository.findByCode(seed.code()).orElse(null);
@@ -52,7 +63,11 @@ public class DevRunner implements ApplicationRunner {
             }
 
             for (DeviceSeed deviceSeed : seed.devices()) {
-                if (deviceRepository.findByCode(deviceSeed.code()).isPresent()) {
+                Device existing = deviceRepository.findByCode(deviceSeed.code()).orElse(null);
+                if (existing != null) {
+                    if (existing.getOperator() == null) {
+                        existing.setOperator(operator); // devices seeded before V2
+                    }
                     continue;
                 }
 
@@ -61,6 +76,7 @@ public class DevRunner implements ApplicationRunner {
                 device.setStation(station);
                 device.setDeviceType(deviceSeed.type());
                 device.setStatus(DeviceStatus.ACTIVE);
+                device.setOperator(operator);
                 device.setLocation(point(seed.longitude(), seed.latitude()));
                 deviceRepository.save(device);
                 devicesCreated++;
