@@ -4,6 +4,7 @@ import com.skylane.tracking.TrackingEventBus;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -19,6 +20,7 @@ import java.util.UUID;
  */
 @Component
 @Profile("!memory")
+@Transactional
 public class OrderStateMachine {
     private static final Map<String, Set<String>> NEXT = Map.of(
             "confirmed", Set.of("dispatched", "canceled", "failed"),
