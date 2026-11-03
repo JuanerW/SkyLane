@@ -67,3 +67,14 @@ CREATE TABLE agent_action (
     created_at      timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX agent_action_conv_idx ON agent_action (conversation_id, created_at);
+
+-- ---------- 第二阶段查询用的索引 ----------
+
+-- 运营方后台按设备查订单（/ops/orders、/ops/metrics，D29）
+CREATE INDEX order_device_created_idx ON delivery_order (device_id, created_at DESC);
+-- 后台指标按时间范围统计
+CREATE INDEX order_created_idx ON delivery_order (created_at);
+-- 按时间顺序找设备空档（D42）、设备排班页（/ops/devices/{id}/schedule）
+CREATE INDEX device_block_active_idx ON device_block (device_id, starts_at) WHERE released_at IS NULL;
+-- 定时把过期的待确认操作标成 expired（D36）
+CREATE INDEX agent_action_pending_idx ON agent_action (expires_at) WHERE status = 'pending';

@@ -273,6 +273,8 @@ spring.jpa.hibernate.ddl-auto: validate
 
 ## 5. 数据库
 
+> 第二阶段新增的表、列和索引见 8.6（Flyway `V2__phase_two.sql`）。
+
 PostgreSQL 16 + PostGIS，MVP 共 11 张表。主键 UUID（order_event 用自增 bigint）；时间 `timestamptz`；坐标 `geography(Point, 4326)`；金额整数美分。
 
 | 表 | 主要字段 | 约束 / 说明 |
@@ -433,7 +435,11 @@ Smart Recommendation、Agent Mode 已细化到第 8 节，作为第二阶段的�
 
 ### 8.6 数据库增量（V2__phase_two.sql，已完成）
 
+以 `BE/src/main/resources/db/migration/V2__phase_two.sql` 为准，内容如下：
+
 ```sql
+-- ---------- 运营方与角色（8.1） ----------
+
 CREATE TABLE operator (
     id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     name       text        NOT NULL UNIQUE,
@@ -443,11 +449,18 @@ CREATE TABLE operator (
 ALTER TABLE app_user ADD COLUMN role text NOT NULL DEFAULT 'customer'
     CHECK (role IN ('customer', 'operator', 'admin'));
 ALTER TABLE app_user ADD COLUMN operator_id uuid REFERENCES operator (id);
+-- operator 必须属于一家公司，其他角色不能有公司
 ALTER TABLE app_user ADD CONSTRAINT app_user_operator_chk
     CHECK ((role = 'operator') = (operator_id IS NOT NULL));
 
-ALTER TABLE device ADD COLUMN operator_id uuid REFERENCES operator (id);  -- 种子数据回填为默认公司
-ALTER TABLE quote  ADD COLUMN pickup_after timestamptz;
+ALTER TABLE device ADD COLUMN operator_id uuid REFERENCES operator (id);  -- 空 = 平台自营
+CREATE INDEX device_operator_idx ON device (operator_id);
+
+-- ---------- 预约下单（8.4） ----------
+
+ALTER TABLE quote ADD COLUMN pickup_after timestamptz;                   -- 空 = 现在
+
+-- ---------- 推荐与 Agent（8.2） ----------
 
 CREATE TABLE recommendation (
     id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -455,9 +468,10 @@ CREATE TABLE recommendation (
     option_id  uuid        NOT NULL,
     reason     text        NOT NULL,
     factors    jsonb       NOT NULL,
-    model      text,                                  -- 空 = 只用了规则
+    model      text,                                                     -- 空 = 只用了规则
     created_at timestamptz NOT NULL DEFAULT now(),
-    FOREIGN KEY (quote_id, option_id) REFERENCES quote_option (quote_id, id)
+    CONSTRAINT recommendation_option_fk
+        FOREIGN KEY (quote_id, option_id) REFERENCES quote_option (quote_id, id)
 );
 
 CREATE TABLE conversation (
@@ -465,17 +479,18 @@ CREATE TABLE conversation (
     user_id    uuid        NOT NULL REFERENCES app_user (id),
     created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX conversation_user_idx ON conversation (user_id, created_at DESC);
 
 CREATE TABLE conversation_message (
     id              bigserial   PRIMARY KEY,
     conversation_id uuid        NOT NULL REFERENCES conversation (id),
     role            text        NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),
     content         jsonb       NOT NULL,
-    input_tokens    int,
-    output_tokens   int,
+    input_tokens    integer,
+    output_tokens   integer,
     created_at      timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX ON conversation_message (conversation_id, id);
+CREATE INDEX conversation_message_conv_idx ON conversation_message (conversation_id, id);
 
 CREATE TABLE agent_action (
     id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -488,6 +503,20 @@ CREATE TABLE agent_action (
     expires_at      timestamptz NOT NULL,
     created_at      timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX agent_action_conv_idx ON agent_action (conversation_id, created_at);
+
+-- ---------- 第二阶段查询用的索引 ----------
+
+-- 运营方后台按设备查订单（/ops/orders、/ops/metrics，D29）
+CREATE INDEX order_device_created_idx ON delivery_order (device_id, created_at DESC);
+-- 后台指标按时间范围统计
+CREATE INDEX order_created_idx ON delivery_order (created_at);
+-- 按时间顺序找设备空档（D42）、设备排班页（/ops/devices/{id}/schedule）
+CREATE INDEX device_block_active_idx ON device_block (device_id, starts_at) WHERE released_at IS NULL;
+-- 定时把过期的待确认操作标成 expired（D36）
+CREATE INDEX agent_action_pending_idx ON agent_action (expires_at) WHERE status = 'pending';
 ```
+
+SQL 末尾的 4 个索引：`delivery_order (device_id, created_at DESC)`、`delivery_order (created_at)`、`device_block (device_id, starts_at) WHERE released_at IS NULL`、`agent_action (expires_at) WHERE status = 'pending'`，分别用于运营方查订单、指标统计、找设备空档、过期待确认操作。
 
 V1 的 11 张表都保留，第二阶段新增 5 张表（operator、recommendation、conversation、conversation_message、agent_action），给 3 张已有的表加列（app_user、device、quote）。
