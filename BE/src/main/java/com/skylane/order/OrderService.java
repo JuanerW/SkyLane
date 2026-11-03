@@ -177,9 +177,7 @@ public class OrderService {
             java.sql.Savepoint savepoint = jdbc.execute(
                     (org.springframework.jdbc.core.ConnectionCallback<java.sql.Savepoint>) java.sql.Connection::setSavepoint);
             try {
-                UUID orderId;
-                try {
-                    orderId = jdbc.queryForObject("""
+                UUID orderId = jdbc.queryForObject("""
                                     INSERT INTO delivery_order (user_id, quote_id, option_id, device_id, device_type,
                                         recipient_name, recipient_phone, price_cents, notes,
                                         pickup_text, pickup_location, dropoff_text, dropoff_location,
@@ -193,10 +191,6 @@ public class OrderService {
                             UUID.class, userId, device.id(), req.recipient().name().trim(), phone,
                             Timestamp.from(departs), Timestamp.from(eta), idempotencyKey, Timestamp.from(now),
                             quoteId, optionId);
-                } catch (DuplicateKeyException e) {
-                    // A concurrent retry with the same key won the race (D13).
-                    throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_REQUEST", "This order is already being placed");
-                }
                 jdbc.update("""
                         INSERT INTO order_item (order_id, description, is_fragile, weight_kg)
                         SELECT ?, item_description, is_fragile, weight_kg FROM quote WHERE id = ?""", orderId, quoteId);
@@ -210,12 +204,18 @@ public class OrderService {
 
                 return new CreateOrderResponse(orderId.toString(), "confirmed",
                         new DeviceRef(device.code(), opt.deviceType()), opt.priceCents(), departs, eta);
-            } catch (DataIntegrityViolationException e) {
+            } catch (RuntimeException e) {
+                // Any SQL error aborts the transaction; roll back to the savepoint first so the
+                // release below and the caller's error response are not masked by "transaction aborted".
                 jdbc.execute((org.springframework.jdbc.core.ConnectionCallback<Void>) connection -> {
                     connection.rollback(savepoint);
                     return null;
                 });
-                if (!isDeviceOverlap(e)) {
+                if (e instanceof DuplicateKeyException) {
+                    // A concurrent retry with the same key won the race (D13).
+                    throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_REQUEST", "This order is already being placed");
+                }
+                if (!(e instanceof DataIntegrityViolationException) || !isDeviceOverlap(e)) {
                     throw e;
                 }
             } finally {
