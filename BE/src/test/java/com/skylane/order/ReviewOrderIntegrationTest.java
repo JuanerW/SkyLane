@@ -27,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ReviewOrderIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
+    @Autowired com.fasterxml.jackson.databind.ObjectMapper mapper;
     @Autowired OrderService orders;
     @Autowired JwtService jwt;
     @MockBean DeviceSimulator simulator;
@@ -105,7 +106,7 @@ class ReviewOrderIntegrationTest {
     void acceptsAllFiveIntegerRatingsAndPersistsUserAndNormalizedComment() throws Exception {
         for (int rating=1;rating<=5;rating++) {
             mvc.perform(post(path()).header("Authorization",token).contentType("application/json")
-                            .content("{\"rating\":"+rating+",\"comment\":\"  Great  \"}"))
+                            .content(mapper.writeValueAsString(java.util.Map.of("rating", rating, "comment", "  Great  "))))
                     .andExpect(status().isCreated()).andExpect(jsonPath("$.rating").value(rating))
                     .andExpect(jsonPath("$.comment").value("Great"))
                     .andExpect(jsonPath("$.created_at").isString());

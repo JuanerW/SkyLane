@@ -20,13 +20,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ReviewOrderControllerTest {
     OrderService service;
     MockMvc mvc;
+    ObjectMapper mapper;
     final UUID user = UUID.randomUUID(), order = UUID.randomUUID();
     String path() { return "/api/v1/orders/" + order + "/review"; }
 
     @BeforeEach
     void setup() {
         service = mock(OrderService.class);
-        ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule())
+        mapper = new ObjectMapper().registerModule(new JavaTimeModule())
                 .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
         mvc = MockMvcBuilders.standaloneSetup(new OrderController(service, () -> user))
                 .setControllerAdvice(new ApiExceptionHandler())
@@ -45,7 +46,7 @@ class ReviewOrderControllerTest {
     @Test
     void rejectsMissingOutOfRangeAndNonIntegerRatingsWithoutWriting() throws Exception {
         for (String value : new String[]{"null", "0", "6", "-1", "4.9", "5.0", "true", "\"5\"", "2147483648", "[]", "{}"}) {
-            mvc.perform(post(path()).contentType("application/json").content("{\"rating\":" + value + "}"))
+            mvc.perform(post(path()).contentType("application/json").content(mapper.writeValueAsString(java.util.Map.of("rating", mapper.readTree(value)))))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
         }
         mvc.perform(post(path()).contentType("application/json").content("{}"))
