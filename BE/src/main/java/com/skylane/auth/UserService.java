@@ -26,7 +26,7 @@ public class UserService {
     private record Credential(UUID id, int tokenVersion, String hash, boolean disabled) {
     }
 
-    private record Account(UUID id, int tokenVersion, boolean disabled) {
+    private record Account(UUID id, int tokenVersion, boolean disabled, String googleSub) {
     }
 
     private final JdbcTemplate jdbc;
@@ -73,8 +73,11 @@ public class UserService {
     }
 
     /**
-     * Google sign-in. Match by google_sub first; otherwise by email (Google vouches for the address via
-     * email_verified, so an existing password account is linked); otherwise create an account with no password.
+     * Google sign-in. Match by google_sub first. Otherwise match by email, but only link an existing account when
+     * Google itself controls that address (see GoogleIdentity.emailIsAuthoritative): a recycled corporate address
+     * can still show email_verified = true for its previous owner. Linking also revokes the account's password and
+     * sessions, because the account may have been pre-registered by someone else. Otherwise create a password-less
+     * account.
      */
     @Transactional
     public AuthResponse googleLogin(String idToken) {
@@ -83,22 +86,57 @@ public class UserService {
         Account account = find("u.google_sub = ?", g.sub());
         if (account == null) {
             account = find("u.email = ?", email);
-            if (account != null && jdbc.update(
-                    "UPDATE app_user SET google_sub = ?, updated_at = now() WHERE id = ? AND google_sub IS NULL",
-                    g.sub(), account.id()) == 0) {
-                // the email already belongs to an account linked to a different Google identity
-                throw new ApiException(HttpStatus.CONFLICT, "GOOGLE_ACCOUNT_MISMATCH",
-                        "This email is linked to a different Google account");
+            // google_sub already equal to ours: a concurrent first sign-in of this same identity created the account
+            // between our two lookups, so there is nothing to link
+            if (account != null && !g.sub().equals(account.googleSub())) {
+                if (!g.emailIsAuthoritative()) {
+                    throw new ApiException(HttpStatus.CONFLICT, "GOOGLE_EMAIL_NOT_TRUSTED",
+                            "An account with this email exists. Sign in with your password instead.");
+                }
+                int linkedRows;
+                try {
+                    linkedRows = jdbc.update(
+                            "UPDATE app_user SET google_sub = ?, updated_at = now() WHERE id = ? AND google_sub IS NULL",
+                            g.sub(), account.id());
+                } catch (DuplicateKeyException e) {
+                    // this Google identity got linked to another account (e.g. its email changed) a moment ago
+                    throw new ApiException(HttpStatus.CONFLICT, "GOOGLE_ACCOUNT_MISMATCH",
+                            "This Google account is already linked to a different account");
+                }
+                if (linkedRows == 0) {
+                    // Either a concurrent request just linked this same Google identity, or the account belongs to
+                    // a different one. Only the first is fine.
+                    Account linked = find("u.google_sub = ?", g.sub());
+                    if (linked == null || !linked.id().equals(account.id())) {
+                        throw new ApiException(HttpStatus.CONFLICT, "GOOGLE_ACCOUNT_MISMATCH",
+                                "This email is linked to a different Google account");
+                    }
+                    account = linked;
+                } else {
+                    // register() does not verify the address, so whoever created this account may not own it. Google
+                    // has just proved the real owner is here: drop any password and sign out every earlier session.
+                    jdbc.update("DELETE FROM user_credential WHERE user_id = ?", account.id());
+                    Integer version = jdbc.queryForObject(
+                            "UPDATE app_user SET token_version = token_version + 1 WHERE id = ? RETURNING token_version",
+                            Integer.class, account.id());
+                    account = new Account(account.id(), version, account.disabled(), g.sub());
+                }
             }
         }
         if (account == null) {
-            try {
-                UUID id = jdbc.queryForObject(
-                        "INSERT INTO app_user (email, display_name, google_sub) VALUES (?, ?, ?) RETURNING id",
-                        UUID.class, email, googleDisplayName(g.name(), email), g.sub());
-                account = new Account(id, 0, false);
-            } catch (DuplicateKeyException e) {
-                throw new ApiException(HttpStatus.CONFLICT, "EMAIL_TAKEN", "An account with this email already exists");
+            // ON CONFLICT DO NOTHING rather than catching DuplicateKeyException: a failed statement would abort the
+            // whole PostgreSQL transaction and we could not look the winner up afterwards.
+            List<UUID> created = jdbc.queryForList("""
+                            INSERT INTO app_user (email, display_name, google_sub) VALUES (?, ?, ?)
+                            ON CONFLICT DO NOTHING RETURNING id""",
+                    UUID.class, email, googleDisplayName(g.name(), email), g.sub());
+            if (!created.isEmpty()) {
+                account = new Account(created.get(0), 0, false, g.sub());
+            } else {
+                account = find("u.google_sub = ?", g.sub());   // a concurrent first sign-in with the same identity
+                if (account == null) {
+                    throw new ApiException(HttpStatus.CONFLICT, "EMAIL_TAKEN", "An account with this email already exists");
+                }
             }
         }
         if (account.disabled()) {
@@ -124,6 +162,11 @@ public class UserService {
      */
     @Transactional
     public AuthResponse changePassword(UUID id, ChangePasswordRequest req) {
+        // The user row always exists, so locking it serializes concurrent password changes. Without it two requests
+        // on a password-less account could both skip the current-password check and overwrite each other.
+        if (jdbc.queryForList("SELECT id FROM app_user WHERE id = ? FOR UPDATE", UUID.class, id).isEmpty()) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Login required");
+        }
         List<String> hashes = jdbc.queryForList("SELECT password_hash FROM user_credential WHERE user_id = ?",
                 String.class, id);
         if (!hashes.isEmpty() && (req.currentPassword() == null || !encoder.matches(req.currentPassword(), hashes.get(0)))) {
@@ -141,8 +184,8 @@ public class UserService {
 
     private Account find(String where, Object arg) {
         List<Account> rows = jdbc.query(
-                "SELECT u.id, u.token_version, u.disabled_at IS NOT NULL FROM app_user u WHERE " + where,
-                (rs, i) -> new Account(rs.getObject(1, UUID.class), rs.getInt(2), rs.getBoolean(3)), arg);
+                "SELECT u.id, u.token_version, u.disabled_at IS NOT NULL, u.google_sub FROM app_user u WHERE " + where,
+                (rs, i) -> new Account(rs.getObject(1, UUID.class), rs.getInt(2), rs.getBoolean(3), rs.getString(4)), arg);
         return rows.isEmpty() ? null : rows.get(0);
     }
 

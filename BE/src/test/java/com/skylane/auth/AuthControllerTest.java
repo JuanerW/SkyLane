@@ -80,6 +80,7 @@ class AuthControllerTest {
         when(service.me(user)).thenReturn(view);
         mvc.perform(get("/api/v1/me")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("customer"))
+                .andExpect(jsonPath("$.operator_id").value((Object) null))
                 .andExpect(jsonPath("$.display_name").value("Ann"))
                 .andExpect(jsonPath("$.has_password").value(true));
     }

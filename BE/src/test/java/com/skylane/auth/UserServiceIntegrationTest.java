@@ -19,7 +19,17 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,6 +53,7 @@ class UserServiceIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
+    @Autowired PlatformTransactionManager tm;
     @MockBean DeviceSimulator simulator;
     @MockBean GoogleIdTokenVerifier google;
 
@@ -51,12 +62,45 @@ class UserServiceIntegrationTest {
 
     @AfterEach
     void cleanup() {
-        jdbc.update("DELETE FROM app_user WHERE email LIKE ?", "%" + tag + "@example.test");
+        jdbc.update("DELETE FROM app_user WHERE email LIKE ?", "%" + tag + "@%");
         jdbc.update("DELETE FROM operator WHERE name = ?", "op-" + tag);
     }
 
     void googleSays(String sub, String mail, String name) {
-        when(google.verify(any())).thenReturn(new GoogleIdTokenVerifier.GoogleIdentity(sub, mail, name));
+        googleSays(sub, mail, name, "");
+    }
+
+    void googleSays(String sub, String mail, String name, String hd) {
+        when(google.verify(any())).thenReturn(new GoogleIdTokenVerifier.GoogleIdentity(sub, mail, name, hd));
+    }
+
+    static Object outcome(Callable<?> call) {
+        try {
+            return call.call();
+        } catch (Exception e) {
+            return e;
+        }
+    }
+
+    /** Releases the calls together on separate threads and returns each outcome (a value or the exception). */
+    <T> List<Object> concurrently(List<Callable<T>> calls) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(calls.size());
+        try {
+            CountDownLatch go = new CountDownLatch(1);
+            List<Future<Object>> futures = new ArrayList<>();
+            for (Callable<T> call : calls) {
+                futures.add(pool.submit(() -> {
+                    go.await();
+                    return outcome(call);
+                }));
+            }
+            go.countDown();
+            List<Object> out = new ArrayList<>();
+            for (Future<Object> f : futures) out.add(f.get(30, TimeUnit.SECONDS));
+            return out;
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     String meWith(String token, int expectedStatus) throws Exception {
@@ -78,22 +122,29 @@ class UserServiceIntegrationTest {
     }
 
     @Test
-    void googleSignInLinksAnExistingPasswordAccountByEmail() {
-        var registered = users.register(new RegisterRequest(email, "password123", "Ann"));
-        googleSays("sub-" + tag, email.toUpperCase(), "Ann From Google");
+    void linkingGoogleToAnExistingAccountKeepsItButRevokesItsPasswordAndSessions() throws Exception {
+        // someone who does not own the address pre-registered it (register() does not verify email) and kept a session
+        var preRegistered = users.register(new RegisterRequest(email, "attackers-password", "Ann"));
+        meWith(preRegistered.accessToken(), 200);
+
+        googleSays("sub-" + tag, email.toUpperCase(), "Ann From Google", "example.test");   // the real owner, via Workspace
         var linked = users.googleLogin("tok");
-        assertThat(linked.user().id()).isEqualTo(registered.user().id());
+        assertThat(linked.user().id()).isEqualTo(preRegistered.user().id());   // same account, so the owner keeps their data
         assertThat(linked.user().googleLinked()).isTrue();
-        assertThat(linked.user().hasPassword()).isTrue();
-        assertThat(linked.user().displayName()).isEqualTo("Ann");   // an existing name is not overwritten
-        assertThat(users.login(new LoginRequest(email, "password123")).user().id()).isEqualTo(registered.user().id());
+        assertThat(linked.user().hasPassword()).isFalse();
+        assertThat(linked.user().displayName()).isEqualTo("Ann");              // an existing name is not overwritten
+
+        meWith(preRegistered.accessToken(), 401);                              // the earlier session is dead
+        meWith(linked.accessToken(), 200);                                     // the owner's new one works
+        assertThatThrownBy(() -> users.login(new LoginRequest(email, "attackers-password"))).isInstanceOfSatisfying(
+                ApiException.class, e -> assertThat(e.code()).isEqualTo("INVALID_CREDENTIALS"));
     }
 
     @Test
     void googleSignInRefusesAnEmailLinkedToADifferentGoogleAccount() {
-        googleSays("sub-a-" + tag, email, "Ann");
+        googleSays("sub-a-" + tag, email, "Ann", "example.test");   // a trusted address, so linking is allowed
         users.googleLogin("tok");
-        googleSays("sub-b-" + tag, email, "Impostor");
+        googleSays("sub-b-" + tag, email, "Impostor", "example.test");
         assertThatThrownBy(() -> users.googleLogin("tok")).isInstanceOfSatisfying(ApiException.class,
                 e -> assertThat(e.code()).isEqualTo("GOOGLE_ACCOUNT_MISMATCH"));
     }
@@ -173,5 +224,120 @@ class UserServiceIntegrationTest {
         assertThat(me.get("role").asText()).isEqualTo("operator");
         assertThat(me.get("operator_id").asText()).isEqualTo(operator.toString());
         assertThat(me.get("display_name").asText()).isEqualTo("Ann Lee");
+    }
+
+    @Test
+    void googleDoesNotTakeOverAnExistingAccountThroughAnAddressGoogleDoesNotControl() {
+        var registered = users.register(new RegisterRequest(email, "password123", "Ann"));
+        googleSays("sub-" + tag, email, "Someone Else");   // email_verified, but no hd and not gmail.com
+        assertThatThrownBy(() -> users.googleLogin("tok")).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.status().value()).isEqualTo(409);
+            assertThat(e.code()).isEqualTo("GOOGLE_EMAIL_NOT_TRUSTED");
+        });
+        assertThat(jdbc.queryForObject("SELECT google_sub FROM app_user WHERE id = ?", String.class,
+                UUID.fromString(registered.user().id()))).isNull();
+    }
+
+    @Test
+    void googleLinksAnExistingAccountThroughAGmailAddress() {
+        String gmail = "auth-" + tag + "@gmail.com";
+        var registered = users.register(new RegisterRequest(gmail, "password123", "Ann"));
+        googleSays("sub-" + tag, gmail, "Ann");
+        assertThat(users.googleLogin("tok").user().id()).isEqualTo(registered.user().id());
+    }
+
+    @Test
+    void anUntrustedAddressStillGetsAFreshAccountWhenNoneExists() {
+        googleSays("sub-" + tag, email, "New Person");
+        assertThat(users.googleLogin("tok").user().googleLinked()).isTrue();
+    }
+
+    @Test
+    void simultaneousFirstGoogleSignInsOfOneIdentityAllSucceedAndCreateOneAccount() throws Exception {
+        googleSays("sub-" + tag, email, "Ann");
+        List<Callable<AuthDtos.AuthResponse>> calls = new ArrayList<>();
+        for (int i = 0; i < 6; i++) calls.add(() -> users.googleLogin("tok"));
+        List<Object> results = concurrently(calls);
+        assertThat(results).allSatisfy(r -> assertThat(r).isInstanceOf(AuthDtos.AuthResponse.class));
+        assertThat(results.stream().map(r -> ((AuthDtos.AuthResponse) r).user().id()).distinct()).hasSize(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM app_user WHERE email = ?", Integer.class, email)).isEqualTo(1);
+    }
+
+    @Test
+    void simultaneousFirstGoogleSignInsLinkAnExistingAccountWithoutAFalseConflict() throws Exception {
+        var registered = users.register(new RegisterRequest(email, "password123", "Ann"));
+        googleSays("sub-" + tag, email, "Ann", "example.test");
+        List<Callable<AuthDtos.AuthResponse>> calls = new ArrayList<>();
+        for (int i = 0; i < 6; i++) calls.add(() -> users.googleLogin("tok"));
+        List<Object> results = concurrently(calls);
+        assertThat(results).allSatisfy(r -> assertThat(r).isInstanceOf(AuthDtos.AuthResponse.class));
+        assertThat(results.stream().map(r -> ((AuthDtos.AuthResponse) r).user().id()).distinct())
+                .containsExactly(registered.user().id());
+        for (Object r : results) meWith(((AuthDtos.AuthResponse) r).accessToken(), 200);   // none carries a stale token_version
+    }
+
+    /**
+     * Deterministic: this test holds the user row lock itself, so a changePassword that does not lock the row would
+     * finish at once and fail the "still blocked" assertions.
+     */
+    @Test
+    void changingAPasswordWaitsForTheUserRowLockSoTwoFirstPasswordsCannotOverwriteEachOther() throws Exception {
+        googleSays("sub-" + tag, email, "Ann");
+        UUID id = UUID.fromString(users.googleLogin("tok").user().id());
+        ExecutorService pool = Executors.newFixedThreadPool(3);
+        try {
+            CountDownLatch holding = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            Future<?> holder = pool.submit(() -> new TransactionTemplate(tm).executeWithoutResult(status -> {
+                jdbc.queryForList("SELECT id FROM app_user WHERE id = ? FOR UPDATE", UUID.class, id);
+                holding.countDown();
+                try {
+                    release.await(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }));
+            assertThat(holding.await(10, TimeUnit.SECONDS)).isTrue();
+
+            Future<Object> first = pool.submit(() -> outcome(
+                    () -> users.changePassword(id, new ChangePasswordRequest(null, "first-password-1"))));
+            Future<Object> second = pool.submit(() -> outcome(
+                    () -> users.changePassword(id, new ChangePasswordRequest(null, "second-password-2"))));
+            Thread.sleep(1000);
+            assertThat(first.isDone()).as("first change is waiting on the row lock").isFalse();
+            assertThat(second.isDone()).as("second change is waiting on the row lock").isFalse();
+
+            release.countDown();
+            holder.get(10, TimeUnit.SECONDS);
+            List<Object> results = List.of(first.get(30, TimeUnit.SECONDS), second.get(30, TimeUnit.SECONDS));
+            assertThat(results.stream().filter(r -> r instanceof AuthDtos.AuthResponse).count()).isEqualTo(1);
+            Object loser = results.stream().filter(r -> r instanceof ApiException).findFirst().orElseThrow();
+            assertThat(((ApiException) loser).code()).isEqualTo("INVALID_CURRENT_PASSWORD");   // it saw the winner's password
+            String winner = results.get(0) instanceof AuthDtos.AuthResponse ? "first-password-1" : "second-password-2";
+            assertThat(users.login(new LoginRequest(email, winner)).user().id()).isEqualTo(id.toString());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void oneGoogleIdentityShowingUpWithTwoEmailsNeverCausesAServerError() throws Exception {
+        for (int round = 0; round < 6; round++) {
+            String sub = "sub-r" + round + "-" + tag;
+            String mailA = "auth-a" + round + "-" + tag + "@example.test";
+            String mailB = "auth-b" + round + "-" + tag + "@example.test";
+            users.register(new RegisterRequest(mailA, "password123", "A"));
+            users.register(new RegisterRequest(mailB, "password123", "B"));
+            when(google.verify("tok-a")).thenReturn(new GoogleIdTokenVerifier.GoogleIdentity(sub, mailA, "A", "example.test"));
+            when(google.verify("tok-b")).thenReturn(new GoogleIdTokenVerifier.GoogleIdentity(sub, mailB, "B", "example.test"));
+            for (Object r : concurrently(List.of(() -> users.googleLogin("tok-a"), () -> users.googleLogin("tok-b")))) {
+                if (r instanceof Exception e) {
+                    // depending on timing the second request may log in as the first account, or be refused; never a 500
+                    assertThat(e).isInstanceOfSatisfying(ApiException.class,
+                            api -> assertThat(api.code()).isEqualTo("GOOGLE_ACCOUNT_MISMATCH"));
+                }
+            }
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM app_user WHERE google_sub = ?", Integer.class, sub)).isEqualTo(1);
+        }
     }
 }

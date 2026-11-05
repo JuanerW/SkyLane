@@ -41,6 +41,8 @@ const STATIONS: Station[] = [
   { id: "st-marina", code: "marina", name: "Marina Station", lat: 37.8008, lng: -122.4368 },
 ];
 
+let mockPassword = "password123"; // the seed account's password; PUT /me/password replaces it
+
 const USER: User = {
   id: "00000000-0000-4000-8000-000000000001",
   email: "alice@skylane.dev",
@@ -369,8 +371,9 @@ function route(method: Method, path: string, body: unknown): unknown {
   }
   if (method === "PUT" && path === "/me/password") {
     if (String(b.new_password ?? "").length < 8) throw new MockError(400, "VALIDATION_ERROR");
-    // the seed account's password is password123; a Google-only account may set one without a current password
-    if (USER.has_password && b.current_password !== "password123") throw new MockError(400, "INVALID_CURRENT_PASSWORD");
+    // a Google-only account (has_password false) may set its first password without a current one
+    if (USER.has_password && b.current_password !== mockPassword) throw new MockError(400, "INVALID_CURRENT_PASSWORD");
+    mockPassword = String(b.new_password);
     USER.has_password = true;
     return { access_token: "mock-token", user: USER };
   }

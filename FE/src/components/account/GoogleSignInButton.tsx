@@ -58,7 +58,10 @@ export function GoogleSignInButton({ onCredential }: { onCredential: (idToken: s
         if (cancelled || !el || !window.google) return;
         window.google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
-          callback: (res) => latest.current(res.credential),
+          // a credential can arrive after the user left the page; do not sign in on behalf of an unmounted form
+          callback: (res) => {
+            if (!cancelled) latest.current(res.credential);
+          },
         });
         // Google draws the button itself; its width must be between 200 and 400 px.
         const width = Math.min(400, Math.max(200, Math.floor(el.clientWidth)));

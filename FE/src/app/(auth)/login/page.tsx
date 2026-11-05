@@ -21,6 +21,7 @@ const MESSAGES: Record<string, string> = {
   ACCOUNT_DISABLED: "This account has been disabled. Contact support.",
   INVALID_GOOGLE_TOKEN: "Google sign-in could not be verified. Try again.",
   GOOGLE_ACCOUNT_MISMATCH: "This email is already linked to a different Google account.",
+  GOOGLE_EMAIL_NOT_TRUSTED: "An account with this email already exists. Sign in with your password instead.",
   GOOGLE_NOT_CONFIGURED: "Google sign-in is not set up on the server yet.",
   GOOGLE_UNAVAILABLE: "Could not reach Google. Try again in a moment.",
 };

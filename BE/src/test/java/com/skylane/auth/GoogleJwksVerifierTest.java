@@ -14,7 +14,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.Map;
+import java.time.Duration;
+import java.time.ZoneId;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -67,7 +70,11 @@ class GoogleJwksVerifierTest {
     }
 
     void assertRejected(String token, String code) {
-        assertThatThrownBy(() -> verifier.verify(token)).isInstanceOfSatisfying(ApiException.class,
+        assertRejected(verifier, token, code);
+    }
+
+    void assertRejected(GoogleJwksVerifier v, String token, String code) {
+        assertThatThrownBy(() -> v.verify(token)).isInstanceOfSatisfying(ApiException.class,
                 e -> assertThat(e.code()).isEqualTo(code));
     }
 
@@ -156,5 +163,114 @@ class GoogleJwksVerifierTest {
         verifier = verifierFor("");
         assertRejected(good(), "GOOGLE_NOT_CONFIGURED");
         assertThat(fetches.get()).isZero();
+    }
+
+    /** A clock the test can move forward. */
+    static class MutableClock extends Clock {
+        Instant now = NOW;
+        @Override public Instant instant() { return now; }
+        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(ZoneId zone) { return this; }
+        void advance(Duration d) { now = now.plus(d); }
+    }
+
+    String tokenWithHd(String hd) throws Exception {
+        return token(key, "kid-1", "RS256", "{\"iss\":\"https://accounts.google.com\",\"aud\":\"" + CLIENT_ID + "\",\"exp\":"
+                + (NOW.getEpochSecond() + 3600) + ",\"sub\":\"g-1\",\"email\":\"a@" + hd + "\",\"email_verified\":true,\"hd\":\"" + hd + "\"}");
+    }
+
+    @Test
+    void exposesTheWorkspaceDomainAndWhetherGoogleControlsTheAddress() throws Exception {
+        var workspace = verifier.verify(tokenWithHd("columbia.edu"));
+        assertThat(workspace.hd()).isEqualTo("columbia.edu");
+        assertThat(workspace.emailIsAuthoritative()).isTrue();
+        assertThat(verifier.verify(good()).hd()).isEmpty();
+        assertThat(verifier.verify(good()).emailIsAuthoritative()).isFalse();   // Ann@Example.com, no hd
+        assertThat(new GoogleIdTokenVerifier.GoogleIdentity("s", "Bob@Gmail.com", "Bob", "").emailIsAuthoritative()).isTrue();
+    }
+
+    @Test
+    void refetchesKeysAfterTheCacheExpires() throws Exception {
+        MutableClock clock = new MutableClock();
+        var v = new GoogleJwksVerifier(CLIENT_ID, clock, () -> {
+            fetches.incrementAndGet();
+            return Map.of("kid-1", key.getPublic());
+        });
+        String longLived = token(key, "kid-1", "RS256",
+                claims("https://accounts.google.com", CLIENT_ID, NOW.getEpochSecond() + 7200, "true"));
+        v.verify(longLived);
+        clock.advance(Duration.ofMinutes(59));
+        v.verify(longLived);
+        assertThat(fetches.get()).isEqualTo(1);
+        clock.advance(Duration.ofMinutes(2));
+        v.verify(longLived);
+        assertThat(fetches.get()).isEqualTo(2);
+    }
+
+    @Test
+    void picksUpRotatedKeysButNotMoreOftenThanOnceAMinute() throws Exception {
+        MutableClock clock = new MutableClock();
+        AtomicReference<Map<String, PublicKey>> published = new AtomicReference<>(Map.of("kid-1", key.getPublic()));
+        var v = new GoogleJwksVerifier(CLIENT_ID, clock, () -> {
+            fetches.incrementAndGet();
+            return published.get();
+        });
+        String rotated = token(otherKey, "kid-2", "RS256",
+                claims("https://accounts.google.com", CLIENT_ID, NOW.getEpochSecond() + 7200, "true"));
+        v.verify(good());                                    // first fetch: only kid-1
+        published.set(Map.of("kid-1", key.getPublic(), "kid-2", otherKey.getPublic()));   // Google rotates
+        assertThatThrownBy(() -> v.verify(rotated)).isInstanceOf(ApiException.class);     // too soon to refetch
+        assertThat(fetches.get()).isEqualTo(1);
+        clock.advance(Duration.ofMinutes(2));
+        assertThat(v.verify(rotated).sub()).isEqualTo("g-123");                           // refetched, now known
+        assertThat(fetches.get()).isEqualTo(2);
+    }
+
+    @Test
+    void backsOffAfterAFailedFetchInsteadOfRetryingForEveryRequest() throws Exception {
+        MutableClock clock = new MutableClock();
+        AtomicReference<Boolean> googleDown = new AtomicReference<>(true);
+        var v = new GoogleJwksVerifier(CLIENT_ID, clock, () -> {
+            fetches.incrementAndGet();
+            if (googleDown.get()) {
+                throw new ApiException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "GOOGLE_UNAVAILABLE", "down");
+            }
+            return Map.of("kid-1", key.getPublic());
+        });
+        for (int i = 0; i < 6; i++) {
+            assertThatThrownBy(() -> v.verify(good())).isInstanceOfSatisfying(ApiException.class,
+                    e -> assertThat(e.code()).isEqualTo("GOOGLE_UNAVAILABLE"));
+        }
+        assertThat(fetches.get()).isEqualTo(1);              // five of the six failed fast, without calling Google
+        googleDown.set(false);
+        clock.advance(Duration.ofSeconds(11));
+        assertThat(v.verify(good()).sub()).isEqualTo("g-123");
+        assertThat(fetches.get()).isEqualTo(2);
+    }
+
+    @Test
+    void aFailedForcedRefreshStillCountsTowardsTheOncePerMinuteLimit() throws Exception {
+        MutableClock clock = new MutableClock();
+        AtomicReference<Boolean> googleDown = new AtomicReference<>(false);
+        var v = new GoogleJwksVerifier(CLIENT_ID, clock, () -> {
+            fetches.incrementAndGet();
+            if (googleDown.get()) {
+                throw new ApiException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "GOOGLE_UNAVAILABLE", "down");
+            }
+            return Map.of("kid-1", key.getPublic());
+        });
+        String forged = token(otherKey, "forged-kid", "RS256",
+                claims("https://accounts.google.com", CLIENT_ID, NOW.getEpochSecond() + 7200, "true"));
+        v.verify(good());                                    // fetch 1 succeeds
+        googleDown.set(true);
+        clock.advance(Duration.ofMinutes(2));
+        assertThatThrownBy(() -> v.verify(forged)).isInstanceOf(ApiException.class);   // fetch 2: forced refresh, fails
+        assertThat(fetches.get()).isEqualTo(2);
+        clock.advance(Duration.ofSeconds(11));               // the 10 s failure backoff is over, a minute is not
+        assertRejected(v, forged, "INVALID_GOOGLE_TOKEN");   // a plain rejection, with no call to Google
+        assertThat(fetches.get()).isEqualTo(2);
+        clock.advance(Duration.ofMinutes(1));
+        assertThatThrownBy(() -> v.verify(forged)).isInstanceOf(ApiException.class);   // a minute after the last attempt
+        assertThat(fetches.get()).isEqualTo(3);
     }
 }

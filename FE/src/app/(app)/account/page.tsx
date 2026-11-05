@@ -169,12 +169,14 @@ export default function AccountPage() {
             </ul>
             {!user.google_linked && (
               <p className="mt-2 text-xs text-slate-400">
-                To link Google, sign out and choose “Continue with Google” with the same email address.
+                To link Google, sign out and choose “Continue with Google” with the same Gmail or Google Workspace
+                address. Google then becomes your sign-in method and your current password is removed; you can set a new
+                one here afterwards.
               </p>
             )}
           </div>
 
-          <PasswordForm key={`password-${user.id}-${user.has_password}`} user={user} />
+          <PasswordForm key={`password-${user.id}`} user={user} />
         </>
       )}
 

@@ -39,6 +39,8 @@ public class GoogleJwksVerifier implements GoogleIdTokenVerifier {
     private static final Set<String> ISSUERS = Set.of("accounts.google.com", "https://accounts.google.com");
     private static final Duration KEY_TTL = Duration.ofHours(1);
     private static final Duration SKEW = Duration.ofSeconds(60);
+    private static final Duration FORCED_REFRESH_GAP = Duration.ofMinutes(1);
+    private static final Duration FAILURE_BACKOFF = Duration.ofSeconds(10);
     private static final Base64.Decoder B64D = Base64.getUrlDecoder();
 
     private final String clientId;
@@ -47,6 +49,8 @@ public class GoogleJwksVerifier implements GoogleIdTokenVerifier {
     private final Supplier<Map<String, PublicKey>> keySource;
     private volatile Map<String, PublicKey> keys = Map.of();
     private volatile Instant keysLoadedAt = Instant.MIN;
+    private volatile Instant lastAttemptAt = Instant.MIN;
+    private volatile Instant lastFailureAt = Instant.MIN;
 
     @Autowired
     public GoogleJwksVerifier(@Value("${skylane.google.client-id:}") String clientId, Clock clock) {
@@ -84,7 +88,7 @@ public class GoogleJwksVerifier implements GoogleIdTokenVerifier {
             String sub = c.path("sub").asText("");
             String email = c.path("email").asText("");
             if (sub.isBlank() || email.isBlank()) throw invalid();
-            return new GoogleIdentity(sub, email, c.path("name").asText(""));
+            return new GoogleIdentity(sub, email, c.path("name").asText(""), c.path("hd").asText(""));
         } catch (ApiException e) {
             throw e;
         } catch (Exception e) {
@@ -93,19 +97,38 @@ public class GoogleJwksVerifier implements GoogleIdTokenVerifier {
     }
 
     private PublicKey keyFor(String kid) {
-        PublicKey key = loadKeys(false).get(kid);
-        if (key == null) key = loadKeys(true).get(kid);   // Google rotated keys since our last fetch
+        boolean fresh = keysLoadedAt.plus(KEY_TTL).isAfter(clock.instant());
+        if (fresh) {
+            PublicKey cached = keys.get(kid);
+            if (cached != null) return cached;   // the normal path never takes the lock or touches the network
+        }
+        // stale cache, or a kid we have not seen (Google rotated keys): refresh, rate limited
+        PublicKey key = refresh(fresh).get(kid);
         if (key == null) throw invalid();
         return key;
     }
 
-    private synchronized Map<String, PublicKey> loadKeys(boolean force) {
+    /**
+     * Only one thread talks to Google at a time. A failed fetch is remembered, so the threads queued behind it
+     * (and a flood of forged tokens) fail fast for a few seconds instead of each waiting out the timeout.
+     * unknownKid = the cache is fresh but does not know this kid: refresh at most once a minute, counting failed
+     * attempts too. Otherwise the cache has simply expired: refresh, subject only to the failure backoff.
+     */
+    private synchronized Map<String, PublicKey> refresh(boolean unknownKid) {
         Instant now = clock.instant();
-        // at most one forced refresh a minute, so a stream of forged kids cannot hammer Google
-        boolean stale = keysLoadedAt.plus(force ? Duration.ofMinutes(1) : KEY_TTL).isBefore(now);
-        if (stale) {
+        if (unknownKid) {
+            if (lastAttemptAt.plus(FORCED_REFRESH_GAP).isAfter(now)) return keys;
+        } else if (keysLoadedAt.plus(KEY_TTL).isAfter(now)) {
+            return keys;   // another thread refreshed while we waited for the lock
+        }
+        if (lastFailureAt.plus(FAILURE_BACKOFF).isAfter(now)) throw unavailable();
+        lastAttemptAt = now;
+        try {
             keys = keySource.get();
             keysLoadedAt = now;
+        } catch (RuntimeException e) {
+            lastFailureAt = now;
+            throw e;
         }
         return keys;
     }
