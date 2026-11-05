@@ -78,4 +78,4 @@ npm run dev                     # http://localhost:3000/orders
 | 变量 | 说明 |
 |---|---|
 | `NEXT_PUBLIC_API_BASE` | 后端地址，如 `http://localhost:8080/api/v1` |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google 登录（第二轮） |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google 登录按钮用的 Client ID（不是密钥，可共享）；不设置则登录页不显示 Google 按钮。需要和后端的 `GOOGLE_CLIENT_ID` 一致 |

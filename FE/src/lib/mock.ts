@@ -361,6 +361,19 @@ function route(method: Method, path: string, body: unknown): unknown {
   let m: RegExpMatchArray | null;
 
   if (method === "GET" && path === "/me") return USER;
+  if (method === "PATCH" && path === "/me") {
+    const name = String(b.display_name ?? "").trim();
+    if (!name || name.length > 80) throw new MockError(400, "VALIDATION_ERROR");
+    USER.display_name = name;
+    return USER;
+  }
+  if (method === "PUT" && path === "/me/password") {
+    if (String(b.new_password ?? "").length < 8) throw new MockError(400, "VALIDATION_ERROR");
+    // the seed account's password is password123; a Google-only account may set one without a current password
+    if (USER.has_password && b.current_password !== "password123") throw new MockError(400, "INVALID_CURRENT_PASSWORD");
+    USER.has_password = true;
+    return { access_token: "mock-token", user: USER };
+  }
   if (method === "GET" && path === "/stations") return STATIONS;
   if (method === "GET" && path === "/orders") {
     store().forEach(tick);
