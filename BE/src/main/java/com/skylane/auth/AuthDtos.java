@@ -18,8 +18,20 @@ public final class AuthDtos {
     public record LoginRequest(@NotBlank String email, @NotBlank String password) {
     }
 
+    /** role is customer / operator / admin; operatorId is set only for operators (design 8.3, D27). */
     public record UserView(String id, String email, String displayName, boolean hasPassword,
-                           boolean googleLinked, Instant createdAt) {
+                           boolean googleLinked, Instant createdAt, String role, String operatorId) {
+    }
+
+    public record GoogleLoginRequest(@NotBlank @Size(max = 4096) String idToken) {
+    }
+
+    public record UpdateProfileRequest(@NotBlank @Size(max = 80) String displayName) {
+    }
+
+    /** currentPassword may be omitted only by an account that has no password yet (Google sign-up). */
+    public record ChangePasswordRequest(@Size(max = 100) String currentPassword,
+                                        @NotBlank @Size(min = 8, max = 100) String newPassword) {
     }
 
     public record AuthResponse(String accessToken, UserView user) {
