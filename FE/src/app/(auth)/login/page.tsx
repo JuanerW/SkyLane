@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { setToken } from "@/lib/auth";
+import { GoogleSignInButton, GOOGLE_CLIENT_ID } from "@/components/account/GoogleSignInButton";
 import type { User } from "@/types/contract";
 
 interface AuthResponse {
@@ -17,6 +18,12 @@ const MESSAGES: Record<string, string> = {
   EMAIL_TAKEN: "An account with this email already exists. Sign in instead.",
   VALIDATION_ERROR: "Check the fields: a valid email and a password of at least 8 characters.",
   NETWORK_ERROR: "Could not reach the server.",
+  ACCOUNT_DISABLED: "This account has been disabled. Contact support.",
+  INVALID_GOOGLE_TOKEN: "Google sign-in could not be verified. Try again.",
+  GOOGLE_ACCOUNT_MISMATCH: "This email is already linked to a different Google account.",
+  GOOGLE_EMAIL_NOT_TRUSTED: "An account with this email already exists. Sign in with your password instead.",
+  GOOGLE_NOT_CONFIGURED: "Google sign-in is not set up on the server yet.",
+  GOOGLE_UNAVAILABLE: "Could not reach Google. Try again in a moment.",
 };
 
 function LoginForm() {
@@ -34,19 +41,18 @@ function LoginForm() {
   const next = params.get("next");
   const target = next && next.startsWith("/") && !next.startsWith("//") ? next : "/ship";
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const finish = (res: AuthResponse) => {
+    qc.clear();
+    setToken(res.access_token);
+    qc.setQueryData(["me"], res.user);
+    router.replace(target);
+  };
+
+  const attempt = async (call: () => Promise<AuthResponse>) => {
     setError("");
     setBusy(true);
     try {
-      const res =
-        mode === "login"
-          ? await api.post<AuthResponse>("/auth/login", { email, password })
-          : await api.post<AuthResponse>("/auth/register", { email, password, display_name: name });
-      qc.clear();
-      setToken(res.access_token);
-      qc.setQueryData(["me"], res.user);
-      router.replace(target);
+      finish(await call());
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "";
       setError(MESSAGES[code] ?? "Something went wrong. Try again.");
@@ -54,6 +60,17 @@ function LoginForm() {
       setBusy(false);
     }
   };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void attempt(() =>
+      mode === "login"
+        ? api.post<AuthResponse>("/auth/login", { email, password })
+        : api.post<AuthResponse>("/auth/register", { email, password, display_name: name }),
+    );
+  };
+
+  const withGoogle = (idToken: string) => void attempt(() => api.post<AuthResponse>("/auth/google", { id_token: idToken }));
 
   const input = "w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none";
 
@@ -98,6 +115,17 @@ function LoginForm() {
         >
           {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
         </button>
+
+        {GOOGLE_CLIENT_ID && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-xs text-slate-400">
+              <span className="h-px flex-1 bg-slate-200" />
+              or
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+            <GoogleSignInButton onCredential={withGoogle} />
+          </div>
+        )}
 
         <p className="text-center text-sm text-slate-500">
           {mode === "login" ? "New to SkyLane? " : "Already have an account? "}
