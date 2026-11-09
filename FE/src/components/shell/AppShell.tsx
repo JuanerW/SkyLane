@@ -25,7 +25,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             SkyLane
           </Link>
           <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-1 overflow-x-auto whitespace-nowrap px-4 text-sm [scrollbar-width:none] sm:order-none sm:mx-0 sm:w-auto sm:px-0">
-            {NAV.map((n) => {
+            {/* Design 8.1: operators and admins also get the Ops entry. */}
+            {(user?.role === "operator" || user?.role === "admin" ? [...NAV, { href: "/ops", label: "Ops" }] : NAV).map((n) => {
               const active = pathname === n.href || pathname.startsWith(`${n.href}/`);
               return (
                 <Link
