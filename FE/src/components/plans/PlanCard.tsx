@@ -50,13 +50,15 @@ interface Props {
   quotedAt: number;
   selected: boolean;
   onSelect: () => void;
+  recommendationReason?: string;
+  readOnly?: boolean;
 }
 
 export function etaMinutes(option: QuoteOption, quotedAt: number) {
   return option.eta_at ? Math.max(1, Math.round((new Date(option.eta_at).getTime() - quotedAt) / 60_000)) : null;
 }
 
-export function PlanCard({ option: o, quotedAt, selected, onSelect }: Props) {
+export function PlanCard({ option: o, quotedAt, selected, onSelect, recommendationReason, readOnly = false }: Props) {
   const departsNow = !!o.departs_at && new Date(o.departs_at).getTime() - quotedAt < 60_000;
 
   return (
@@ -64,8 +66,9 @@ export function PlanCard({ option: o, quotedAt, selected, onSelect }: Props) {
       type="button"
       className={`plan ${!o.available ? "dim" : selected ? "sel" : ""}`}
       aria-pressed={selected}
-      aria-disabled={!o.available}
-      onClick={o.available ? onSelect : undefined}
+      disabled={readOnly}
+      aria-disabled={readOnly || !o.available}
+      onClick={!readOnly && o.available ? onSelect : undefined}
     >
       <div className="mb-2.5 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
@@ -102,13 +105,16 @@ export function PlanCard({ option: o, quotedAt, selected, onSelect }: Props) {
               <div>{departsNow ? "Departs now" : `Next free ${o.departs_at && formatTime(o.departs_at)}`}</div>
             </div>
           </div>
-          <div
+          {recommendationReason && (
+            <p className="mt-3 rounded-md bg-indigo-50 px-3 py-2 text-left text-[13px] leading-normal text-indigo-800">{recommendationReason}</p>
+          )}
+          {!readOnly && <div
             className={`mt-3 flex h-10 items-center justify-center rounded-md text-sm font-semibold ${
               selected ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
             }`}
           >
             {selected ? "Selected" : "Select plan"}
-          </div>
+          </div>}
         </>
       ) : (
         <div className="text-[13px] font-semibold text-amber-700">

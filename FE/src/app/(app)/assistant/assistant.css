@@ -1,0 +1,75 @@
+/* Shared visual language with delivery plan cards, scoped to chat. */
+.assistant .btn {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-height: 44px; padding: 10px 16px; border-radius: 10px;
+  background: #4338ca; color: white; font-size: 14px; font-weight: 600;
+  white-space: nowrap; transition: background 150ms;
+}
+.assistant .btn:hover { background: #3730a3; }
+.assistant .btn:disabled { background: #d5d8e0; color: #4b5263; cursor: not-allowed; }
+.assistant .ghost {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  min-height: 40px; padding: 8px 12px; border: 1px solid #cdd1db; border-radius: 10px;
+  background: white; color: #2a2f3c; font-size: 14px; font-weight: 500; white-space: nowrap;
+}
+.assistant .ghost:hover { background: #f5f6f8; }
+.assistant .ghost:disabled { opacity: .55; cursor: not-allowed; }
+.assistant .btn:focus-visible, .assistant .ghost:focus-visible { outline: 2px solid #4338ca; outline-offset: 3px; }
+.assistant .plan { display: block; width: 100%; padding: 0; text-align: left; color: inherit; background: white; }
+.assistant .mono { font-family: ui-monospace, monospace; white-space: nowrap; }
+
+
+/* Semantic Markdown layout. Wide comparison tables scroll inside the message. */
+.assistant-markdown { min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
+.assistant-markdown > :first-child { margin-top: 0; }
+.assistant-markdown > :last-child { margin-bottom: 0; }
+.assistant-markdown p { margin: 0 0 12px; }
+.assistant-markdown strong { font-weight: 700; color: #172033; }
+.assistant-markdown em { font-style: italic; }
+.assistant-markdown h1, .assistant-markdown h2, .assistant-markdown h3,
+.assistant-markdown h4, .assistant-markdown h5, .assistant-markdown h6 {
+  margin: 18px 0 8px; font-weight: 700; color: #172033; line-height: 1.4;
+}
+.assistant-markdown h1 { font-size: 20px; }
+.assistant-markdown h2 { font-size: 18px; }
+.assistant-markdown h3 { font-size: 16px; }
+.assistant-markdown ul, .assistant-markdown ol { margin: 8px 0 12px; padding-left: 22px; }
+.assistant-markdown ul { list-style: disc; }
+.assistant-markdown ol { list-style: decimal; }
+.assistant-markdown li { margin: 4px 0; padding-left: 2px; }
+.assistant-markdown li > p { margin: 4px 0; }
+.assistant-markdown li > ul, .assistant-markdown li > ol { margin: 4px 0; }
+.assistant-markdown ul.contains-task-list { padding-left: 2px; list-style: none; }
+.assistant-markdown input[type="checkbox"] { margin-right: 8px; accent-color: #4338ca; }
+.assistant-markdown a { color: #4338ca; text-decoration: underline; text-underline-offset: 3px; }
+.assistant-markdown a:hover { color: #312e81; }
+.assistant-markdown blockquote { margin: 12px 0; border-left: 3px solid #a5b4fc; padding: 4px 0 4px 12px; color: #475569; }
+.assistant-markdown blockquote p:last-child { margin-bottom: 0; }
+.assistant-markdown hr { margin: 16px 0; border: 0; border-top: 1px solid #cbd5e1; }
+.assistant-markdown code { border-radius: 5px; background: #e2e8f0; padding: 2px 5px; font-family: ui-monospace, monospace; font-size: .9em; }
+.assistant-markdown pre { max-width: 100%; overflow-x: auto; margin: 12px 0; padding: 14px; border-radius: 10px; background: #172033; color: #e2e8f0; white-space: pre; }
+.assistant-markdown pre code { padding: 0; background: none; color: inherit; font-size: 12px; }
+.assistant-table-scroll { max-width: 100%; overflow-x: auto; margin: 14px 0; border: 1px solid #d7ddeb; border-radius: 10px; background: white; }
+.assistant-table-scroll:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+.assistant-markdown table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; line-height: 1.5; }
+.assistant-markdown th { background: #eef2ff; color: #3730a3; font-weight: 600; white-space: nowrap; }
+.assistant-markdown th, .assistant-markdown td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+.assistant-markdown td { font-variant-numeric: tabular-nums; }
+.assistant-markdown tbody tr:nth-child(even) { background: #f8fafc; }
+.assistant-markdown tbody tr:hover { background: #eef2ff; }
+.assistant-markdown tbody tr:last-child td { border-bottom: 0; }
+.assistant-markdown table strong { color: #3730a3; }
+
+/* Match the order page's typography and plan-card treatment. */
+.assistant .action-card { font-family: var(--font-dm-sans), system-ui, sans-serif; color: #14171f; padding: 18px; border: 1.5px solid #e3e5eb; border-radius: 14px; background: #fff; }
+.assistant .action-card-pending { border-color: #4338ca; box-shadow: 0 0 0 3px rgba(67,56,202,.15); }
+.assistant .action-card .mono { font-family: var(--font-dm-mono), ui-monospace, monospace; font-weight: 500; }
+.assistant .action-status { border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 600; text-transform: capitalize; background: #f0f1f5; color: #5b6274; }
+.assistant .action-status-pending { background: #eaebfb; color: #3730a3; }
+.assistant .action-status-confirmed { background: #dcfce7; color: #166534; }
+.assistant .action-status-failed { background: #ffedd5; color: #9a3412; }
+.assistant .action-details { border-top: 1px solid #e3e5eb; padding-top: 14px; }
+.assistant .action-details dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.assistant .action-card .btn { min-height: 40px; border-radius: 9px; }
+.assistant .action-card .ghost { background: #eef0ff; color: #3730a3; border-color: transparent; }
+.assistant .action-card .plan:disabled { opacity: 1; cursor: default; }

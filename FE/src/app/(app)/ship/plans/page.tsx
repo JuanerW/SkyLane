@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DeliveryMap, type MapRoute } from "@/components/map";
 import { etaMinutes, PlanCard, VEHICLE_NAME } from "@/components/plans/PlanCard";
-import { toQuoteRequest, useCreateOrder, useQuote } from "@/hooks/useQuote";
+import { toQuoteRequest, useCreateOrder, useQuote, useRecommendation } from "@/hooks/useQuote";
 import { useShipmentDraft } from "@/hooks/useShipmentDraft";
 import { ApiError } from "@/lib/api";
 import { formatPrice, formatTime } from "@/lib/time";
@@ -74,6 +74,7 @@ export default function PlansPage() {
   const quote = useQuote(body);
   const createOrder = useCreateOrder();
   const data = quote.data;
+  const recommendation = useRecommendation(data);
   const quotedAt = quote.dataUpdatedAt;
 
   // Nothing to compare without a filled-in request.
@@ -110,9 +111,13 @@ export default function PlansPage() {
   const options = useMemo(
     () =>
       (data?.options ?? []).map((o) =>
-        blocked[o.option_id] ? { ...o, available: false, unavailable_reason: blocked[o.option_id], tags: [] } : o,
+        blocked[o.option_id]
+          ? { ...o, available: false, unavailable_reason: blocked[o.option_id], tags: [] }
+          : recommendation.data
+            ? { ...o, tags: [...o.tags.filter(t => t !== "recommended"), ...(o.option_id === recommendation.data.option_id ? ["recommended" as const] : [])] }
+            : o,
       ),
-    [data, blocked],
+    [data, blocked, recommendation.data],
   );
   const sorted = useMemo(() => sortOptions(options, mode), [options, mode]);
   const visible = sorted.filter((o) => vehicle === "all" || o.device_type === vehicle);
@@ -217,6 +222,15 @@ export default function PlansPage() {
         </div>
 
         <section className="flex min-w-0 flex-[2_1_380px] flex-col gap-3">
+          {data && anyAvailable && recommendation.isPending && (
+            <div role="status" className="rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-800">Finding your recommended plan…</div>
+          )}
+          {data && recommendation.isError && (
+            <div role="status" className="rounded-xl bg-[#F0F1F5] px-4 py-3 text-sm text-[#4B5263]">
+              Recommendation unavailable. You can still compare and select any plan.
+              <button type="button" className="ghost ml-2" onClick={() => recommendation.refetch()}>Retry recommendation</button>
+            </div>
+          )}
           {notice && (
             <div role="status" className="rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-3 text-sm text-sky-900">
               {notice}
@@ -275,6 +289,7 @@ export default function PlansPage() {
                 key={o.option_id}
                 option={o}
                 quotedAt={quotedAt}
+                recommendationReason={o.available && o.option_id === recommendation.data?.option_id ? recommendation.data.reason : undefined}
                 selected={o.option_id === selected?.option_id}
                 onSelect={() => select(o)}
               />

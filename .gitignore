@@ -20,3 +20,6 @@ build/
 *.iml
 .DS_Store
 Thumbs.db
+
+# Agent client test output
+.agent-test-build/

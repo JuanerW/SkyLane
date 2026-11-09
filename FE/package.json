@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "gen:types": "node scripts/gen-types.mjs"
+    "gen:types": "node scripts/gen-types.mjs",
+    "test:agent": "tsc tests/agent-sse.test.ts --outDir .agent-test-build --module commonjs --target es2022 --esModuleInterop --skipLibCheck --moduleResolution node && node --test .agent-test-build/tests/agent-sse.test.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^7.0.1",
@@ -17,6 +18,8 @@
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.91.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

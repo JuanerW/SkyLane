@@ -1,4 +1,9 @@
 spring:
+  config:
+    import:
+      # Works when launched from BE/ or from the repository root; missing files are optional.
+      - "optional:file:./.env[.properties]"
+      - "optional:file:./BE/.env[.properties]"
   application:
     name: skylane
   profiles:
@@ -30,6 +35,18 @@ springdoc:
     path: /swagger-ui.html
 
 skylane:
+  agent:
+    api-key: ${DEEPSEEK_API_KEY:}
+    model: deepseek-flash
+    base-url: https://api.deepseek.com/anthropic
+    daily-messages: 100
+    daily-tokens: 1000000
+    max-output-tokens: 1024
+    max-rounds: 5
+    action-ttl-minutes: 10
+  recommendation:
+    weather-enabled: ${RECOMMENDATION_WEATHER_ENABLED:true}
+    wind-threshold-mps: ${RECOMMENDATION_WIND_THRESHOLD_MPS:10}
   jwt:
     secret: ${JWT_SECRET:}
     ttl-days: 7

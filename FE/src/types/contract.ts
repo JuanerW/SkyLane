@@ -134,6 +134,19 @@ export interface QuoteResponse {
   quote_id: string;
   expires_at: string;
   options: QuoteOption[];
+  recommended_option_id?: string | null;
+}
+
+export interface Recommendation {
+  option_id: string;
+  reason: string;
+  factors: {
+    algorithm: string;
+    preference: string;
+    weather_status: string;
+    wind_speed_mps?: number;
+    [key: string]: unknown;
+  };
 }
 
 /** POST /orders response */

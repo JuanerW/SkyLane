@@ -1,0 +1,198 @@
+[
+  {
+    "name": "search_address",
+    "description": "Search San Francisco addresses. Ask users to choose ambiguous matches.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "create_quote",
+    "description": "Create options using verified addresses and user-provided package data.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "item": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "fragile": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "description",
+            "fragile"
+          ],
+          "additionalProperties": false
+        },
+        "weight_kg": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 10
+        },
+        "pickup": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "lat": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "lng": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            }
+          },
+          "required": [
+            "text",
+            "lat",
+            "lng"
+          ],
+          "additionalProperties": false
+        },
+        "dropoff": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "lat": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "lng": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            }
+          },
+          "required": [
+            "text",
+            "lat",
+            "lng"
+          ],
+          "additionalProperties": false
+        },
+        "notes": {
+          "type": "string"
+        },
+        "arrive_within_minutes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "item",
+        "weight_kg",
+        "pickup",
+        "dropoff"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_order",
+    "description": "Read one order belonging to this customer.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "order_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "order_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_orders",
+    "description": "List this customer latest orders.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "propose_order",
+    "description": "Creates a PENDING order card. Does NOT place an order; human confirmation is required.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "quote_id": {
+          "type": "string"
+        },
+        "option_id": {
+          "type": "string"
+        },
+        "recipient": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "phone"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "quote_id",
+        "option_id",
+        "recipient"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "cancel_order",
+    "description": "Creates a PENDING cancellation card. Does NOT cancel an order; human confirmation is required.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "order_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "order_id"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

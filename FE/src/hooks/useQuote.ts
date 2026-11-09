@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { CreateOrderResponse, QuoteRequest, QuoteResponse } from "@/types/contract";
+import type { CreateOrderResponse, QuoteRequest, QuoteResponse, Recommendation } from "@/types/contract";
 import type { ShipmentForm } from "./useShipmentDraft";
 
 export function toQuoteRequest(form: ShipmentForm): QuoteRequest | null {
@@ -25,6 +25,19 @@ export function useQuote(body: QuoteRequest | null) {
     enabled: !!body,
     gcTime: 0,
     staleTime: Infinity,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/** Recommendation is optional: its failure never blocks selecting or ordering a plan. */
+export function useRecommendation(quote: QuoteResponse | undefined) {
+  return useQuery({
+    queryKey: ["recommendation", quote?.quote_id],
+    queryFn: () => api.post<Recommendation>(`/quotes/${quote!.quote_id}/recommendation`),
+    enabled: !!quote && quote.options.some(o => o.available),
+    staleTime: Infinity,
+    gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
   });

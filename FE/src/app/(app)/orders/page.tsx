@@ -74,6 +74,11 @@ export default function OrdersPage() {
     [all, filter, query, newestFirst],
   );
 
+  const counts = useMemo(
+    () => Object.fromEntries(FILTERS.map(([v]) => [v, all.filter((o) => matchesFilter(o, v)).length])) as Record<Filter, number>,
+    [all],
+  );
+
   const clear = () => {
     setQuery("");
     setFilter("all");
@@ -138,7 +143,7 @@ export default function OrdersPage() {
                   aria-pressed={filter === v}
                   onClick={() => setFilter(v)}
                 >
-                  {name} <span className="opacity-70">{all.filter((o) => matchesFilter(o, v)).length}</span>
+                  {name} <span className="opacity-70">{counts[v]}</span>
                 </button>
               ))}
             </div>
@@ -221,6 +226,10 @@ export default function OrdersPage() {
                         <span className="mono text-slate-900">{formatPrice(o.price_cents)}</span>
                       </div>
                     </button>
+                    {/* Outside the card button: a link cannot sit inside a button. */}
+                    <div className="px-4 pt-1.5 empty:hidden">
+                      <RowActions o={o} />
+                    </div>
                   </li>
                 ))}
               </ul>

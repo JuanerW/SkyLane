@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 const NAV = [
   { href: "/ship", label: "New Delivery" },
   { href: "/orders", label: "My Orders" },
+  { href: "/assistant", label: "Assistant" },
   { href: "/account", label: "Account" },
 ];
 
