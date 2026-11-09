@@ -24,6 +24,9 @@ export interface User {
   has_password: boolean;
   google_linked: boolean;
   created_at: string;
+  /** Added in round 2 (design 8.3). Absent from older responses and mock data, so treat undefined as customer. */
+  role?: "customer" | "operator" | "admin";
+  operator_id?: string | null;
 }
 
 export interface Station {
