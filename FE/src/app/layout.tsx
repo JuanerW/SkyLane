@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+// ui.css first, so Tailwind utilities (hidden, sm:flex, ...) still override the component classes.
+import "./ui.css";
 import "./globals.css";
 import { Providers } from "./providers";
 

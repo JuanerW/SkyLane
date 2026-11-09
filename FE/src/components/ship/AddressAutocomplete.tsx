@@ -81,7 +81,7 @@ export function AddressAutocomplete({ id, label, placeholder, value, onChange, e
         <div
           id={`${id}-list`}
           role="listbox"
-          className="absolute inset-x-0 top-[78px] z-10 overflow-hidden rounded-[10px] border border-[#CDD1DB] bg-white shadow-[0_8px_24px_rgba(20,23,31,.12)]"
+          className="absolute inset-x-0 top-[66px] z-10 overflow-hidden rounded-md border border-slate-300 bg-white shadow-lg"
         >
           {options.map((p, i) => (
             <button
@@ -97,9 +97,9 @@ export function AddressAutocomplete({ id, label, placeholder, value, onChange, e
               {p.text}
             </button>
           ))}
-          {search.isFetching && options.length === 0 && <div className="px-3 py-2.5 text-sm text-[#5B6274]">Searching…</div>}
+          {search.isFetching && options.length === 0 && <div className="px-3 py-2.5 text-sm text-slate-500">Searching…</div>}
           {search.isError && (
-            <div className="px-3 py-2.5 text-sm text-[#B42318]">
+            <div className="px-3 py-2.5 text-sm text-rose-600">
               Address search is unavailable.{" "}
               <button
                 type="button"
@@ -112,7 +112,7 @@ export function AddressAutocomplete({ id, label, placeholder, value, onChange, e
             </div>
           )}
           {search.isSuccess && !search.isFetching && options.length === 0 && (
-            <div className="px-3 py-2.5 text-sm text-[#5B6274]">No matching address in San Francisco.</div>
+            <div className="px-3 py-2.5 text-sm text-slate-500">No matching address in San Francisco.</div>
           )}
         </div>
       )}

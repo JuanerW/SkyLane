@@ -8,5 +8,5 @@ export { pointAlong, arcPath } from "./geometry";
 // MapLibre needs the browser, so the map only renders on the client.
 export const DeliveryMap = dynamic(() => import("./DeliveryMap"), {
   ssr: false,
-  loading: () => <div className="h-full w-full animate-pulse rounded-[14px] bg-[#E9ECF1]" />,
+  loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-slate-100" />,
 });

@@ -1,8 +1,8 @@
 // Address autocomplete (Photon, public service, no key). Same San Francisco bounds as the backend (D23).
 import type { Place } from "@/types/contract";
+import { SERVICE_AREA } from "./serviceArea";
 
 const PHOTON_URL = "https://photon.komoot.io/api/";
-const BOUNDS = { minLat: 37.7, maxLat: 37.84, minLng: -122.52, maxLng: -122.35 };
 
 export const MIN_QUERY_LENGTH = 3;
 
@@ -27,7 +27,7 @@ function label(p: PhotonFeature["properties"]): string {
 }
 
 export async function searchAddress(query: string, signal?: AbortSignal): Promise<Place[]> {
-  const { minLat, maxLat, minLng, maxLng } = BOUNDS;
+  const { minLat, maxLat, minLng, maxLng } = SERVICE_AREA;
   const params = new URLSearchParams({
     q: query,
     limit: "6",

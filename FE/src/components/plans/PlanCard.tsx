@@ -4,9 +4,9 @@ import { formatMiles, formatPrice, formatTime } from "@/lib/time";
 import type { QuoteOption } from "@/types/contract";
 
 const TAG = {
-  recommended: { text: "Recommended", cls: "bg-[#EAEBFB] text-[#3730A3]" },
-  fastest: { text: "Fastest", cls: "bg-[#FFEDD5] text-[#9A3412]" },
-  cheapest: { text: "Lowest Cost", cls: "bg-[#DCFCE7] text-[#166534]" },
+  recommended: { text: "Recommended", cls: "bg-indigo-100 text-indigo-800" },
+  fastest: { text: "Fastest", cls: "bg-orange-100 text-orange-800" },
+  cheapest: { text: "Lowest Cost", cls: "bg-emerald-100 text-emerald-800" },
 };
 
 export const UNAVAILABLE_TEXT: Record<string, string> = {
@@ -22,7 +22,7 @@ export const VEHICLE_NAME = { robot: "Ground Robot", drone: "Drone" };
 
 function VehicleIcon({ type }: { type: QuoteOption["device_type"] }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14171F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {type === "robot" ? (
         <>
           <rect x="4" y="9" width="16" height="9" rx="2" />
@@ -72,12 +72,12 @@ export function PlanCard({ option: o, quotedAt, selected, onSelect, recommendati
     >
       <div className="mb-2.5 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-[10px] bg-[#F0F1F5]">
+          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-slate-100">
             <VehicleIcon type={o.device_type} />
           </div>
           <div>
-            <div className="text-base font-bold">{VEHICLE_NAME[o.device_type]}</div>
-            <div className="text-xs text-[#5B6274]">{o.station.name}</div>
+            <div className="text-base font-semibold">{VEHICLE_NAME[o.device_type]}</div>
+            <div className="text-xs text-slate-500">{o.station.name}</div>
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-1">
@@ -94,30 +94,30 @@ export function PlanCard({ option: o, quotedAt, selected, onSelect, recommendati
           <div className="flex items-baseline gap-6">
             <div>
               <div className="mono text-2xl font-medium">{etaMinutes(o, quotedAt)} min</div>
-              <div className="text-xs text-[#5B6274]">Arrives {o.eta_at && formatTime(o.eta_at)}</div>
+              <div className="text-xs text-slate-500">Arrives {o.eta_at && formatTime(o.eta_at)}</div>
             </div>
             <div>
               <div className="mono text-2xl font-medium">{o.price_cents !== null && formatPrice(o.price_cents)}</div>
-              <div className="text-xs text-[#5B6274]">Estimated price</div>
+              <div className="text-xs text-slate-500">Estimated price</div>
             </div>
-            <div className="ml-auto text-right text-xs leading-normal text-[#4B5263]">
+            <div className="ml-auto text-right text-xs leading-normal text-slate-600">
               {o.distance_m !== null && <div>{formatMiles(o.distance_m)} route</div>}
               <div>{departsNow ? "Departs now" : `Next free ${o.departs_at && formatTime(o.departs_at)}`}</div>
             </div>
           </div>
           {recommendationReason && (
-            <p className="mt-3 rounded-lg bg-[#EEF0FF] px-3 py-2 text-left text-[13px] leading-normal text-[#3730A3]">{recommendationReason}</p>
+            <p className="mt-3 rounded-md bg-indigo-50 px-3 py-2 text-left text-[13px] leading-normal text-indigo-800">{recommendationReason}</p>
           )}
           {!readOnly && <div
-            className={`mt-3 flex h-10 items-center justify-center rounded-[9px] text-sm font-semibold ${
-              selected ? "bg-[#4338CA] text-white" : "bg-[#EEF0FF] text-[#3730A3]"
+            className={`mt-3 flex h-10 items-center justify-center rounded-md text-sm font-semibold ${
+              selected ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"
             }`}
           >
             {selected ? "Selected" : "Select plan"}
           </div>}
         </>
       ) : (
-        <div className="text-[13px] font-semibold text-[#8A4B00]">
+        <div className="text-[13px] font-semibold text-amber-700">
           {(o.unavailable_reason && UNAVAILABLE_TEXT[o.unavailable_reason]) ?? "Not available"}
         </div>
       )}

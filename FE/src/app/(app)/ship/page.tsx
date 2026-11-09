@@ -81,7 +81,7 @@ function ShipForm({ draft, save }: { draft: ShipmentDraft | null; save: (d: Ship
     <div className="flex flex-wrap items-start gap-6">
       <form onSubmit={handleSubmit(onValid)} noValidate className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
         <section className="card px-6 py-[22px]">
-          <h2 className="mb-4 text-base font-bold">Package</h2>
+          <h2 className="mb-4 text-base font-semibold">Package</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="lbl" htmlFor="description">
@@ -114,7 +114,7 @@ function ShipForm({ draft, save }: { draft: ShipmentDraft | null; save: (d: Ship
             <div>
               <span className="lbl">Handling</span>
               <label className="flex h-11 cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" className="h-4 w-4 accent-[#4338CA]" {...register("fragile")} />
+                <input type="checkbox" className="h-4 w-4 accent-slate-900" {...register("fragile")} />
                 Fragile
               </label>
             </div>
@@ -122,7 +122,7 @@ function ShipForm({ draft, save }: { draft: ShipmentDraft | null; save: (d: Ship
         </section>
 
         <section className="card px-6 py-[22px]">
-          <h2 className="mb-4 text-base font-bold">Pickup</h2>
+          <h2 className="mb-4 text-base font-semibold">Pickup</h2>
           <Controller
             control={control}
             name="pickup"
@@ -143,7 +143,7 @@ function ShipForm({ draft, save }: { draft: ShipmentDraft | null; save: (d: Ship
         </section>
 
         <section className="card px-6 py-[22px]">
-          <h2 className="mb-4 text-base font-bold">Delivery</h2>
+          <h2 className="mb-4 text-base font-semibold">Delivery</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <Controller
@@ -191,7 +191,7 @@ function ShipForm({ draft, save }: { draft: ShipmentDraft | null; save: (d: Ship
             </div>
             <div className="sm:col-span-2">
               <label className="lbl" htmlFor="notes">
-                Notes <span className="font-normal text-[#5B6274]">(optional)</span>
+                Notes <span className="font-normal text-slate-500">(optional)</span>
               </label>
               <textarea
                 id="notes"
@@ -255,13 +255,13 @@ function ShipForm({ draft, save }: { draft: ShipmentDraft | null; save: (d: Ship
             Clear form
           </button>
           {toast && (
-            <span role="status" className="rounded-lg bg-[#E6F6EC] px-3 py-2 text-[13px] text-[#0B6B3A]">
+            <span role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-[13px] text-emerald-700">
               {toast}
             </span>
           )}
         </div>
         {hasErrors && (
-          <div role="alert" className="text-[13px] text-[#B42318]">
+          <div role="alert" className="text-[13px] text-rose-600">
             Complete the highlighted fields to see delivery options.
           </div>
         )}
@@ -279,11 +279,11 @@ export default function ShipPage() {
 
   return (
     <div className="mx-auto max-w-[1120px]">
-      <div className="mb-1.5 text-[13px] text-[#5B6274]">Step 1 of 2 · Request</div>
-      <h1 className="mb-1.5 text-[30px] font-bold leading-tight tracking-[-0.01em]">
+      <div className="mb-1.5 text-[13px] text-slate-500">Step 1 of 2 · Request</div>
+      <h1 className="mb-1.5 text-2xl font-semibold">
         Where would you like to send a package?
       </h1>
-      <p className="mb-6 text-[15px] text-[#5B6274]">
+      <p className="mb-6 text-[15px] text-slate-500">
         Tell us what and where. We&apos;ll compare robot and drone options across San Francisco.
       </p>
       {/* The form takes its defaults from the draft, so wait until sessionStorage has been read. */}
