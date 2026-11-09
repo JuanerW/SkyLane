@@ -75,6 +75,12 @@ public class AppConfig {
                     res.setContentType(MediaType.APPLICATION_JSON_VALUE);
                     mapper.writeValue(res.getOutputStream(), Map.of("error",
                             Map.of("code", "UNAUTHORIZED", "message", "Login required", "details", Map.of())));
+                }).accessDeniedHandler((req, res, ex) -> {
+                    // Design 8.1: a customer calling /ops or /admin gets 403 FORBIDDEN.
+                    res.setStatus(403);
+                    res.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    mapper.writeValue(res.getOutputStream(), Map.of("error",
+                            Map.of("code", "FORBIDDEN", "message", "You do not have access to this page", "details", Map.of())));
                 }))
                 .authorizeHttpRequests(auth -> {
                     // SSE responses finish on an async dispatch; the original request was already authorized.
@@ -87,6 +93,8 @@ public class AppConfig {
                     if (memory) {
                         auth.requestMatchers("/api/v1/quotes").permitAll();
                     }
+                    auth.requestMatchers("/api/v1/admin/**").hasRole("ADMIN");
+                    auth.requestMatchers("/api/v1/ops/**").hasAnyRole("OPERATOR", "ADMIN");
                     auth.anyRequest().authenticated();
                 })
                 .build();
