@@ -191,14 +191,14 @@ export default function PlansPage() {
     <div className="mx-auto max-w-[1240px]">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <div className="mb-1 text-[13px] text-[#5B6274]">
-            <Link href="/ship" className="font-semibold text-[#3730A3]">
+          <div className="mb-1 text-[13px] text-slate-500">
+            <Link href="/ship" className="font-semibold text-indigo-600">
               Request
             </Link>{" "}
             · Step 2 of 2 · Choose a plan
           </div>
-          <h1 className="mb-1 text-[26px] font-bold tracking-[-0.01em]">Delivery options</h1>
-          <div className="text-sm text-[#4B5263]">
+          <h1 className="mb-1 text-2xl font-semibold">Delivery options</h1>
+          <div className="text-sm text-slate-600">
             {form.pickup.text} to {form.dropoff.text} · {form.description}, {form.weight} kg
             {form.fragile ? ", fragile" : ""} · {form.recipient_name}
           </div>
@@ -218,7 +218,7 @@ export default function PlansPage() {
 
         <section className="flex min-w-0 flex-[2_1_380px] flex-col gap-3">
           {notice && (
-            <div role="status" className="rounded-xl border border-[#C9CDF5] bg-[#EEF0FF] px-3.5 py-3 text-sm text-[#1E1B6B]">
+            <div role="status" className="rounded-lg border border-sky-200 bg-sky-50 px-3.5 py-3 text-sm text-sky-900">
               {notice}
             </div>
           )}
@@ -226,13 +226,13 @@ export default function PlansPage() {
           {quote.isPending && body && (
             <div aria-label="Loading delivery options" className="flex flex-col gap-3">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-40 animate-pulse rounded-[14px] bg-[#E9EBF0]" />
+                <div key={i} className="h-40 animate-pulse rounded-lg bg-slate-100" />
               ))}
             </div>
           )}
 
           {quote.isError && !quoteCode?.match(/OUT_OF_SERVICE_AREA|SAME_ADDRESS/) && (
-            <div role="alert" className="rounded-xl border border-[#F5C77E] bg-[#FFF4E5] px-4 py-3.5 text-sm text-[#5A3300]">
+            <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
               <div className="mb-3">Could not load delivery options.</div>
               <button type="button" className="ghost" onClick={() => refetch()}>
                 Try again
@@ -241,8 +241,8 @@ export default function PlansPage() {
           )}
 
           {data && !anyAvailable && (
-            <div role="alert" className="rounded-xl border border-[#F5C77E] bg-[#FFF4E5] px-4 py-3.5 text-sm leading-normal text-[#5A3300]">
-              <div className="mb-1 font-bold">
+            <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm leading-normal text-amber-900">
+              <div className="mb-1 font-semibold">
                 {allMissedDeadline ? `No delivery can arrive within ${form.arrive_within} minutes` : "No delivery option is available"}
               </div>
               {allMissedDeadline ? "The limiting constraint is your time window." : "Try a lighter package or different addresses."}
@@ -261,7 +261,7 @@ export default function PlansPage() {
           )}
 
           {data && anyAvailable && !visible.some((o) => o.available) && (
-            <div className="rounded-xl border border-dashed border-[#CDD1DB] bg-white p-5 text-center text-sm text-[#4B5263]">
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-5 text-center text-sm text-slate-600">
               No {vehicle === "robot" ? "ground robot" : "drone"} option is available.{" "}
               <button type="button" className="ghost ml-1.5" onClick={() => setVehicle("all")}>
                 Show all vehicles
@@ -284,10 +284,10 @@ export default function PlansPage() {
             {selected ? (
               <div className="mb-2.5 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[15px] font-bold">
+                  <div className="text-base font-semibold">
                     {VEHICLE_NAME[selected.device_type]} · {selected.station.name}
                   </div>
-                  <div className="text-[13px] text-[#4B5263]">
+                  <div className="text-[13px] text-slate-600">
                     To {form.recipient_name} · Arrives {selected.eta_at && formatTime(selected.eta_at)} ·{" "}
                     {etaMinutes(selected, quotedAt)} min
                   </div>
@@ -303,7 +303,7 @@ export default function PlansPage() {
                 Could not place the order. Try again.
               </div>
             )}
-            <div className="mt-2 text-center text-xs text-[#5B6274]">
+            <div className="mt-2 text-center text-xs text-slate-500">
               Prices are estimates. Availability is confirmed when you place the order.
             </div>
           </div>

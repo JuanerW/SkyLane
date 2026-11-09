@@ -23,6 +23,8 @@ export interface RequestOptions {
   body?: unknown;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /** Public endpoint: send no token, and a 401 does not bounce to /login. */
+  anonymous?: boolean;
 }
 
 export function authHeaders(): Record<string, string> {
@@ -49,7 +51,7 @@ export async function request<T>(method: Method, path: string, opts: RequestOpti
       headers: {
         Accept: "application/json",
         ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
-        ...authHeaders(),
+        ...(opts.anonymous ? {} : authHeaders()),
         ...opts.headers,
       },
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -60,7 +62,7 @@ export async function request<T>(method: Method, path: string, opts: RequestOpti
     throw new ApiError(0, "NETWORK_ERROR", "Could not reach the server");
   }
 
-  if (res.status === 401) handleUnauthorized();
+  if (res.status === 401 && !opts.anonymous) handleUnauthorized();
   if (res.status === 204) return undefined as T;
 
   const data = await res.json().catch(() => null);

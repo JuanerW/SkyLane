@@ -82,6 +82,8 @@ public class AppConfig {
                             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                             .requestMatchers("/api/v1/auth/**", "/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                             .permitAll();
+                    // The public home page shows the stations before login (design 8.5).
+                    auth.requestMatchers(HttpMethod.GET, "/api/v1/stations").permitAll();
                     if (memory) {
                         auth.requestMatchers("/api/v1/stations", "/api/v1/quotes").permitAll();
                     }

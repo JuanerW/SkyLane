@@ -8,17 +8,26 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Default profile (no 'dev', no 'memory'): nobody is logged in, so quotes must be refused. Needs the database. */
+/** Default profile (no 'dev', no 'memory'): nobody is logged in. Stations are public, quotes are refused. Needs the database. */
 @EnabledIfEnvironmentVariable(named = "SKYLANE_TEST_DB", matches = ".+")
 @SpringBootTest
 @AutoConfigureMockMvc
 class QuoteApiNoLoginTest {
     @Autowired
     MockMvc mvc;
+
+    @Test
+    void stationsAreOpenWithoutLogin() throws Exception {
+        // The public home page draws the stations before anyone signs in (design 8.5).
+        mvc.perform(get("/api/v1/stations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].code").exists());
+    }
 
     @Test
     void quotesAreRefusedWithoutLogin() throws Exception {

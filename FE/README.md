@@ -40,7 +40,7 @@ npx create-next-app@14 . --ts --tailwind --app --src-dir --eslint
 cd FE
 npm ci
 cp .env.example .env.local      # 默认 NEXT_PUBLIC_USE_MOCK=0，连本地后端；改成 1 用假数据
-npm run dev                     # http://localhost:3000/orders
+npm run dev                     # http://localhost:3000
 ```
 
 ### 假数据（占位，联调后删除）
@@ -60,11 +60,13 @@ npm run dev                     # http://localhost:3000/orders
 | 内容 | 状态 |
 |---|---|
 | `lib/api.ts`、`lib/sse.ts`、`lib/time.ts`、`lib/auth.ts` | 完成 |
-| AppShell（顶部导航）+ 登录守卫 `app/(app)/layout.tsx` | 完成；没有 token 时跳 `/login?next=…` |
-| `/orders` 列表和详情抽屉 | 完成 |
+| AppShell + 登录守卫 `app/(app)/layout.tsx` | 完成；顶部导航，手机宽度时导航换到第二行；Logo 链接到主页；没有 token 时跳 `/login?next=…` |
+| 公开主页 `/` | 完成（区块 5）：产品介绍、站点和服务范围地图、开始寄件入口；未登录也能看，`GET /stations` 不带 token |
+| 样式 | `app/ui.css` 是全站共用的组件类（`card`、`btn`、`ghost`、`inp`、`seg`、`tab` 等），配色与顶部导航、`/orders`、`/login` 一致（slate 灰白）；加载、空状态、错误提示用 `components/ui/States.tsx` |
+| `/orders` 列表和详情抽屉 | 完成；搜索（订单号前 8 位或收件人）、状态筛选、按日期排序，手机宽度为卡片列表 |
 | `/orders/[id]/track` 倒计时、取消、进度、时间线、评价 | 完成 |
 | `/login` | 完成：邮箱登录 / 注册切换，成功后 `setToken(access_token)` 并跳到 `next` 参数 |
-| `/ship`、`/ship/plans`（Pei） | 完成；视觉按 UI 设计稿 A、B，假数据模式下报价和下单走 `mock.ts`，地址补全调用真实的 Photon |
+| `/ship`、`/ship/plans`（Pei） | 完成；视觉统一为全站的 slate 灰白风格，假数据模式下报价和下单走 `mock.ts`，地址补全调用真实的 Photon |
 | 地图（Pei） | 完成；`components/map/`（MapLibre + OpenFreeMap），追踪页通过 `TrackingMap` 复用。瓦片服务连不上时退回纯色底图，路线和标记照常显示 |
 
 ## 约定

@@ -18,11 +18,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
-          <Link href="/ship" className="text-lg font-semibold tracking-tight">
+        {/* Phones: the nav drops to its own row under the logo and scrolls sideways if it has to. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 sm:h-14 sm:flex-nowrap sm:py-0">
+          <Link href="/" className="text-lg font-semibold tracking-tight">
             SkyLane
           </Link>
-          <nav className="flex gap-1 text-sm">
+          <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-1 overflow-x-auto whitespace-nowrap px-4 text-sm [scrollbar-width:none] sm:order-none sm:mx-0 sm:w-auto sm:px-0">
             {NAV.map((n) => {
               const active = pathname === n.href || pathname.startsWith(`${n.href}/`);
               return (
@@ -40,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {USE_MOCK && (
               <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Mock data</span>
             )}
-            {user && <span className="text-slate-600">{user.display_name}</span>}
+            {user && <span className="hidden text-slate-600 sm:inline">{user.display_name}</span>}
             {/* Mock mode has no real token to clear, so signing out would do nothing. */}
             {!USE_MOCK && (
               <button onClick={logout} className="text-slate-500 hover:text-slate-900">
