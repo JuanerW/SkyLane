@@ -94,7 +94,8 @@ class RecommendationDatabaseTest {
         UUID optionId = UUID.fromString(cached.get("option_id").asText());
         assertThat(jdbc.queryForObject("SELECT available FROM quote_option WHERE quote_id = ? AND id = ?", Boolean.class, q, optionId)).isTrue();
         assertThat(jdbc.queryForObject("SELECT model IS NULL FROM recommendation WHERE quote_id = ?", Boolean.class, q)).isTrue();
-        RecommendationService cold = new RecommendationService(jdbc, mapper, Clock.systemUTC(), wind, 10);
+        RecommendationService cold = new RecommendationService(jdbc, mapper, Clock.systemUTC(), wind, 10,
+                new ReasonWriter(new com.skylane.agent.AgentProperties("", "m", "http://localhost", 1, 1, 1, 1, 1, 10), mapper));
         assertThat(cold.recommend(alice, q).optionId()).isEqualTo(optionId);
         assertThat(count(q)).isEqualTo(1);
     }
