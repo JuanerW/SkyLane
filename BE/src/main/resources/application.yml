@@ -44,6 +44,13 @@ skylane:
     max-output-tokens: 1024
     max-rounds: 5
     action-ttl-minutes: 10
+  # Design 8.4 (D39-D40): booking a later pickup.
+  booking:
+    max-days-ahead: 7
+    buffer-ratio: 0.2
+    min-buffer-minutes: 5
+    service-hours: "08:00-20:00"
+    zone: America/Los_Angeles
   recommendation:
     weather-enabled: ${RECOMMENDATION_WEATHER_ENABLED:true}
     wind-threshold-mps: ${RECOMMENDATION_WIND_THRESHOLD_MPS:10}

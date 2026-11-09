@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ApiError } from "@/lib/api";
-import { formatCountdown, formatMiles, formatPrice, formatTime, secondsUntil } from "@/lib/time";
+import { formatCountdown, formatDateTime, formatMiles, formatPrice, formatTime, secondsUntil } from "@/lib/time";
 import { useOrder } from "@/hooks/useOrders";
 import { useTrackingStream } from "@/hooks/useTrackingStream";
 import { useNow } from "@/hooks/useNow";
@@ -56,7 +56,7 @@ export default function TrackPage({ params }: { params: { id: string } }) {
         <section className="space-y-4">
           {o.status === "confirmed" ? (
             <div className="rounded-lg border border-slate-200 bg-white p-6">
-              <p className="text-sm text-slate-500">Scheduled · departs at {formatTime(o.departs_at)}</p>
+              <p className="text-sm text-slate-500">Scheduled · departs {formatDateTime(o.departs_at)}</p>
               <p className="mt-1 text-4xl font-semibold tabular-nums">
                 {departIn === null ? "--:--" : formatCountdown(departIn)}
               </p>

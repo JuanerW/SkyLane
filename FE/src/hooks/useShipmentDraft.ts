@@ -18,6 +18,8 @@ export interface ShipmentForm {
   notes: string;
   /** null = ASAP */
   arrive_within: number | null;
+  /** Local "YYYY-MM-DDTHH:mm" from the picker; null = pick up now (design 8.4). */
+  pickup_after?: string | null;
 }
 
 export interface ShipmentDraft {
@@ -39,6 +41,7 @@ export const EMPTY_FORM: ShipmentForm = {
   recipient_phone: "",
   notes: "",
   arrive_within: null,
+  pickup_after: null,
 };
 
 function read(): ShipmentDraft | null {

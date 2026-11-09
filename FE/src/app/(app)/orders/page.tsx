@@ -12,10 +12,11 @@ import { Stars } from "@/components/tracking/ReviewForm";
 import { EmptyState, ErrorState, LoadingBlock } from "@/components/ui/States";
 import { TERMINAL_STATUSES, type OrderSummary } from "@/types/contract";
 
-type Filter = "all" | "active" | "completed" | "canceled" | "failed";
+type Filter = "all" | "scheduled" | "active" | "completed" | "canceled" | "failed";
 
 const FILTERS: [Filter, string][] = [
   ["all", "All"],
+  ["scheduled", "Scheduled"],
   ["active", "Active"],
   ["completed", "Completed"],
   ["canceled", "Canceled"],
@@ -26,8 +27,13 @@ const VEHICLE = { robot: "Ground robot", drone: "Drone" };
 
 const isActive = (o: OrderSummary) => !TERMINAL_STATUSES.includes(o.status);
 
+/** Design 8.4 (D43): a booked order is "confirmed" with a departure still in the future. */
+const isScheduled = (o: OrderSummary) => o.status === "confirmed" && new Date(o.departs_at).getTime() > Date.now();
+
 function matchesFilter(o: OrderSummary, f: Filter) {
-  return f === "all" || (f === "active" ? isActive(o) : o.status === f);
+  if (f === "all") return true;
+  if (f === "scheduled") return isScheduled(o);
+  return f === "active" ? isActive(o) : o.status === f;
 }
 
 /** Order number (the 8 characters shown in the UI, or the full UUID) or recipient name. */
@@ -41,6 +47,7 @@ function whenText(o: OrderSummary) {
   if (o.status === "completed" && o.completed_at) return `Done ${formatTime(o.completed_at)}`;
   if (o.status === "canceled") return "Canceled";
   if (o.status === "failed") return "Failed";
+  if (isScheduled(o)) return `Departs ${formatDateTime(o.departs_at)}`;
   return `ETA ${formatTime(o.eta_at)}`;
 }
 

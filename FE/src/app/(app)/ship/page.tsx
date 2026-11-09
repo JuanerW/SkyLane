@@ -16,6 +16,24 @@ const ARRIVE_WITHIN:{ value: number | null; label: string }[] = [
   { value: 120, label: "2 hours" },
 ];
 
+/** Design 8.4 (D39): at most 7 days ahead, 08:00-20:00. Mirrors skylane.booking on the server. */
+function pickupError(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const t = new Date(v);
+  if (Number.isNaN(t.getTime())) return "Choose a pickup time.";
+  if (t.getTime() < Date.now() - 60_000) return "Pickup time is in the past.";
+  if (t.getTime() > Date.now() + 7 * 24 * 3600_000) return "Book at most 7 days ahead.";
+  const minutes = t.getHours() * 60 + t.getMinutes();
+  if (minutes < 8 * 60 || minutes > 20 * 60) return "Pickups run from 8:00 to 20:00.";
+  return null;
+}
+
+/** "YYYY-MM-DDTHH:mm" in local time, as datetime-local wants. */
+function localInput(t: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}T${pad(t.getHours())}:${pad(t.getMinutes())}`;
+}
+
 const place = (message: string) =>
   z.object({ text: z.string(), lat: z.number(), lng: z.number() }).nullable().refine((p) => p !== null, { message });
 
@@ -35,6 +53,11 @@ const schema = z
     recipient_phone: z.string().trim().min(1, "Enter a phone number for delivery updates."),
     notes: z.string().max(500, "Keep notes under 500 characters."),
     arrive_within: z.number().nullable(),
+    pickup_after: z.string().nullable().optional(),
+  })
+  .superRefine((f, ctx) => {
+    const msg = pickupError(f.pickup_after);
+    if (msg) ctx.addIssue({ code: "custom", path: ["pickup_after"], message: msg });
   })
   .refine((f) => !f.pickup || !f.dropoff || f.pickup.text !== f.dropoff.text, {
     path: ["dropoff"],
@@ -200,6 +223,45 @@ function ShipForm({ draft, save }: { draft: ShipmentDraft | null; save: (d: Ship
                 {...register("notes")}
               />
               {errors.notes && <div className="err">{errors.notes.message}</div>}
+            </div>
+            <div className="sm:col-span-2">
+              <span className="lbl">Pickup time</span>
+              <Controller
+                control={control}
+                name="pickup_after"
+                render={({ field }) => (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className={`chip ${!field.value ? "on" : ""}`}
+                      aria-pressed={!field.value}
+                      onClick={() => field.onChange(null)}
+                    >
+                      Now
+                    </button>
+                    <button
+                      type="button"
+                      className={`chip ${field.value ? "on" : ""}`}
+                      aria-pressed={!!field.value}
+                      onClick={() => field.value || field.onChange(localInput(new Date(Date.now() + 3600_000)))}
+                    >
+                      Schedule
+                    </button>
+                    {field.value && (
+                      <input
+                        type="datetime-local"
+                        aria-label="Pick up after"
+                        className={`inp !w-auto ${errors.pickup_after ? "bad" : ""}`}
+                        min={localInput(new Date())}
+                        max={localInput(new Date(Date.now() + 7 * 24 * 3600_000))}
+                        value={field.value}
+                        onChange={(e) => field.onChange(e.target.value || null)}
+                      />
+                    )}
+                  </div>
+                )}
+              />
+              {errors.pickup_after && <div className="err">{errors.pickup_after.message}</div>}
             </div>
             <div className="sm:col-span-2">
               <span className="lbl">Arrive within</span>

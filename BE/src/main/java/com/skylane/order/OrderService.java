@@ -2,7 +2,9 @@ package com.skylane.order;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.skylane.booking.Gaps;
 import com.skylane.common.ApiException;
+import com.skylane.config.BookingProperties;
 import com.skylane.geo.Geo;
 import com.skylane.geo.LatLng;
 import com.skylane.order.OrderDtos.CreateOrderRequest;
@@ -51,7 +53,7 @@ public class OrderService {
     private record QuotedOption(UUID userId, String deviceType, UUID stationId, boolean available,
                                 Instant departsAt, Instant expiresAt, Instant deadlineAt, int priceCents,
                                 String routePoints, double pickupLat, double pickupLng, double dropoffLat,
-                                double dropoffLng) {
+                                double dropoffLng, Instant pickupAfter) {
     }
 
     private final JdbcTemplate jdbc;
@@ -60,10 +62,13 @@ public class OrderService {
     private final Clock clock;
     private final double simSpeed;
     private final Duration staleTolerance;
+    private final BookingProperties booking;
 
     public OrderService(JdbcTemplate jdbc, ObjectMapper mapper, OrderStateMachine stateMachine, Clock clock,
                         @Value("${skylane.sim.speed:1.0}") double simSpeed,
-                        @Value("${skylane.quote.stale-tolerance-minutes:5}") int staleToleranceMinutes) {
+                        @Value("${skylane.quote.stale-tolerance-minutes:5}") int staleToleranceMinutes,
+                        BookingProperties booking) {
+        this.booking = booking;
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.stateMachine = stateMachine;
@@ -104,14 +109,14 @@ public class OrderService {
                         SELECT q.user_id, o.device_type, o.station_id, o.available, o.departs_at, q.expires_at,
                                q.deadline_at, coalesce(o.price_cents, 0) AS price_cents, o.route_points::text AS route,
                                ST_Y(q.pickup_location::geometry) AS plat, ST_X(q.pickup_location::geometry) AS plng,
-                               ST_Y(q.dropoff_location::geometry) AS dlat, ST_X(q.dropoff_location::geometry) AS dlng
+                               ST_Y(q.dropoff_location::geometry) AS dlat, ST_X(q.dropoff_location::geometry) AS dlng, q.pickup_after
                         FROM quote q JOIN quote_option o ON o.quote_id = q.id
                         WHERE q.id = ? AND o.id = ?""",
                 (rs, i) -> new QuotedOption(rs.getObject("user_id", UUID.class), rs.getString("device_type"),
                         rs.getObject("station_id", UUID.class), rs.getBoolean("available"), instant(rs, "departs_at"),
                         instant(rs, "expires_at"), instant(rs, "deadline_at"), rs.getInt("price_cents"),
                         rs.getString("route"), rs.getDouble("plat"), rs.getDouble("plng"),
-                        rs.getDouble("dlat"), rs.getDouble("dlng")),
+                        rs.getDouble("dlat"), rs.getDouble("dlng"), instant(rs, "pickup_after")),
                 quoteId, optionId);
         if (found.isEmpty() || !found.get(0).userId().equals(userId)) {
             throw new ApiException(HttpStatus.NOT_FOUND, "OPTION_NOT_FOUND", "This option does not exist");
@@ -125,52 +130,54 @@ public class OrderService {
             throw new ApiException(HttpStatus.CONFLICT, "DEVICE_UNAVAILABLE", "This option is not available");
         }
 
-        // Rank candidates without locking the entire fleet. Lock one at a time below.
-        List<Device> devices = jdbc.query("""
-                        SELECT d.id, d.code,
-                               (SELECT max(b.ends_at) FROM device_block b
-                                WHERE b.device_id = d.id AND b.released_at IS NULL) AS free_at
-                        FROM device d
-                        WHERE d.station_id = ? AND d.device_type = ? AND d.status = 'active'
-                        ORDER BY coalesce((SELECT max(b.ends_at) FROM device_block b
-                            WHERE b.device_id = d.id AND b.released_at IS NULL), '-infinity'::timestamptz), d.code""",
-                (rs, i) -> new Device(rs.getObject("id", UUID.class), rs.getString("code"), instant(rs, "free_at")),
-                opt.stationId(), opt.deviceType());
-        for (Device candidate : devices) {
+        // Durations do not depend on the departure time, so work them out once.
+        List<LatLng> route = parseRoute(opt.routePoints());
+        LatLng pickup = new LatLng(opt.pickupLat(), opt.pickupLng());
+        LatLng dropoff = new LatLng(opt.dropoffLat(), opt.dropoffLng());
+        DeliveryPlan plan = new DeliveryPlan(route, pickup, opt.deviceType());
+        Duration outbound = Duration.ofMillis(Math.round(plan.arrivedAt() / simSpeed * 1000));
+        // Return trip: straight line back to the station (robots x1.3 for streets).
+        double returnM = Geo.haversineM(dropoff, route.get(0)) * ("robot".equals(opt.deviceType()) ? 1.3 : 1);
+        double returnS = returnM / ("robot".equals(opt.deviceType()) ? DeliveryPlan.ROBOT_MPS : DeliveryPlan.DRONE_MPS);
+        Duration occupation = outbound.plusMillis(Math.max(1000, Math.round(returnS / simSpeed * 1000)));
+        // D40: the return block also holds the safety buffer, so later bookings are not pushed back by delays.
+        Duration slot = occupation.plus(booking.buffer(occupation));
+
+        // D42: rank candidates by their earliest free gap (may sit between two bookings), without locking the fleet.
+        record Candidate(UUID id, Instant start) {
+        }
+        List<UUID> deviceIds = jdbc.queryForList("""
+                SELECT d.id FROM device d
+                WHERE d.station_id = ? AND d.device_type = ? AND d.status = 'active' ORDER BY d.code""",
+                UUID.class, opt.stationId(), opt.deviceType());
+        Instant notBefore = earliestAllowed(now, opt.pickupAfter());
+        List<Candidate> ranked = deviceIds.stream()
+                .map(id -> new Candidate(id, Gaps.earliestStart(busy(id, notBefore), notBefore, slot)))
+                .sorted(java.util.Comparator.comparing(Candidate::start))
+                .toList();
+        for (Candidate candidate : ranked) {
             List<String> locked = jdbc.queryForList("""
                     SELECT code FROM device WHERE id = ? AND status = 'active'
                     FOR UPDATE SKIP LOCKED""", String.class, candidate.id());
             if (locked.isEmpty()) {
                 continue;
             }
-            // Read occupation again after acquiring the device lock: another order
-            // may have committed since the candidate list was read.
-            Instant freeAt = jdbc.queryForObject("""
-                    SELECT max(ends_at) FROM device_block
-                    WHERE device_id = ? AND released_at IS NULL""",
-                    (rs, i) -> instant(rs, 1), candidate.id());
-            Device device = new Device(candidate.id(), locked.get(0), freeAt);
+            Device device = new Device(candidate.id(), locked.get(0), null);
             now = clock.instant();
             if (!now.isBefore(opt.expiresAt())) {
                 throw new ApiException(HttpStatus.CONFLICT, "QUOTE_EXPIRED", "The quote has expired");
             }
-
-            Instant departs = departure(device, now);
+            // Read occupation again after acquiring the device lock: another order may have committed since.
+            Instant start = earliestAllowed(now, opt.pickupAfter());
+            Instant departs = Gaps.earliestStart(busy(candidate.id(), start), start, slot);
             if (opt.departsAt() != null && departs.isAfter(opt.departsAt().plus(staleTolerance))) {
                 throw new ApiException(HttpStatus.CONFLICT, "QUOTE_STALE", "Departure moved; please refresh the options");
             }
-            List<LatLng> route = parseRoute(opt.routePoints());
-            LatLng pickup = new LatLng(opt.pickupLat(), opt.pickupLng());
-            LatLng dropoff = new LatLng(opt.dropoffLat(), opt.dropoffLng());
-            DeliveryPlan plan = new DeliveryPlan(route, pickup, opt.deviceType());
-            Instant eta = departs.plusMillis(Math.round(plan.arrivedAt() / simSpeed * 1000));
+            Instant eta = departs.plus(outbound);
             if (opt.deadlineAt() != null && eta.isAfter(opt.deadlineAt())) {
                 throw new ApiException(HttpStatus.CONFLICT, "DEADLINE_MISSED", "Cannot arrive before the deadline");
             }
-            // Return trip: straight line back to the station (robots x1.3 for streets).
-            double returnM = Geo.haversineM(dropoff, route.get(0)) * ("robot".equals(opt.deviceType()) ? 1.3 : 1);
-            double returnS = returnM / ("robot".equals(opt.deviceType()) ? DeliveryPlan.ROBOT_MPS : DeliveryPlan.DRONE_MPS);
-            Instant returnEnds = eta.plusMillis(Math.max(1000, Math.round(returnS / simSpeed * 1000)));
+            Instant returnEnds = departs.plus(slot);
 
             // PostgreSQL aborts a transaction after an exclusion violation. Roll back
             // this attempt to a savepoint before trying another device.
@@ -384,8 +391,17 @@ public class OrderService {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
-    private static Instant departure(Device d, Instant now) {
-        return d.freeAt() == null || d.freeAt().isBefore(now) ? now : d.freeAt();
+    private static Instant earliestAllowed(Instant now, Instant pickupAfter) {
+        return pickupAfter != null && pickupAfter.isAfter(now) ? pickupAfter : now;
+    }
+
+    /** Unreleased blocks of one device that end after {@code from}, by start time. */
+    private List<Gaps.Interval> busy(UUID deviceId, Instant from) {
+        return jdbc.query("""
+                SELECT starts_at, ends_at FROM device_block
+                WHERE device_id = ? AND released_at IS NULL AND ends_at > ? ORDER BY starts_at""",
+                (rs, i) -> new Gaps.Interval(rs.getTimestamp(1).toInstant(), rs.getTimestamp(2).toInstant()),
+                deviceId, Timestamp.from(from));
     }
 
     /** The DB stores E.164. Accept what people type: "(415) 555-0100" becomes +14155550100. */

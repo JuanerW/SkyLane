@@ -111,6 +111,8 @@ export interface QuoteRequest {
   dropoff: Place;
   notes?: string;
   arrive_within_minutes?: number;
+  /** Design 8.4 (D39): ISO time; omitted = pick up now. */
+  pickup_after?: string;
 }
 
 export type QuoteTag = "fastest" | "cheapest" | "recommended";

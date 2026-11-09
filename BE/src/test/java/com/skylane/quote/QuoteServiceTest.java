@@ -44,11 +44,11 @@ class QuoteServiceTest {
     private QuoteService newService(ServiceAreaProperties area, QuoteProperties props, PricingProperties pricing) {
         return new QuoteService(new InMemoryStationRepository(),
                 (s, p, d) -> OsmRoutingClient.fallback(s, p, d, 1.3), props, pricing, area, q -> saved = q,
-                Clock.fixed(now, ZoneOffset.UTC));
+                Clock.fixed(now, ZoneOffset.UTC), new com.skylane.config.BookingProperties(7, 0.2, 5, "08:00-20:00", "America/Los_Angeles"));
     }
 
     private QuoteRequest req(double kg, QuoteRequest.Place from, QuoteRequest.Place to, Integer within) {
-        return new QuoteRequest(new QuoteRequest.Item("Cake", true), kg, from, to, null, within);
+        return new QuoteRequest(new QuoteRequest.Item("Cake", true), kg, from, to, null, within, null);
     }
 
     private QuoteResponse.Option find(QuoteResponse q, String station, String type) {
@@ -160,7 +160,7 @@ class QuoteServiceTest {
                 Thread.currentThread().interrupt();
             }
             return OsmRoutingClient.fallback(s, p, d, 1.3);
-        }, props, pricing, new ServiceAreaProperties(37.70, 37.84, -122.52, -122.35), q -> { }, Clock.fixed(now, ZoneOffset.UTC));
+        }, props, pricing, new ServiceAreaProperties(37.70, 37.84, -122.52, -122.35), q -> { }, Clock.fixed(now, ZoneOffset.UTC), new com.skylane.config.BookingProperties(7, 0.2, 5, "08:00-20:00", "America/Los_Angeles"));
         long start = System.nanoTime();
         assertThat(slow.createQuote(USER, req(1.5, FERRY, ORACLE, null)).options()).hasSize(6);
         assertThat((System.nanoTime() - start) / 1_000_000).as("3 routes x 300 ms in parallel").isLessThan(700);
@@ -180,7 +180,7 @@ class QuoteServiceTest {
         QuoteService empty = new QuoteService(none, (s, p, d) -> OsmRoutingClient.fallback(s, p, d, 1.3),
                 new QuoteProperties(10, 2, 10, 15, 1.5, 15, 1, 2),
                 new PricingProperties(new BigDecimal("1.00"), 100),
-                new ServiceAreaProperties(37.70, 37.84, -122.52, -122.35), q -> { }, Clock.fixed(now, ZoneOffset.UTC));
+                new ServiceAreaProperties(37.70, 37.84, -122.52, -122.35), q -> { }, Clock.fixed(now, ZoneOffset.UTC), new com.skylane.config.BookingProperties(7, 0.2, 5, "08:00-20:00", "America/Los_Angeles"));
         assertThatThrownBy(() -> empty.createQuote(USER, req(1, FERRY, ORACLE, null)))
                 .isInstanceOf(ApiException.class).extracting("code").isEqualTo("NO_STATIONS");
     }

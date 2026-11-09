@@ -15,7 +15,9 @@ public record QuoteRequest(
         @NotNull @Valid Place pickup,
         @NotNull @Valid Place dropoff,
         @Size(max = 500) String notes,
-        @Positive Integer arriveWithinMinutes) {
+        @Positive Integer arriveWithinMinutes,
+        /** D39: optional; null = now. */
+        java.time.Instant pickupAfter) {
 
     public record Item(@NotBlank String description, boolean fragile) {
     }

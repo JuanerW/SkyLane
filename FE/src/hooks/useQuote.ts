@@ -14,6 +14,7 @@ export function toQuoteRequest(form: ShipmentForm): QuoteRequest | null {
     dropoff: form.dropoff,
     notes: form.notes.trim() || undefined,
     arrive_within_minutes: form.arrive_within ?? undefined,
+    pickup_after: form.pickup_after ? new Date(form.pickup_after).toISOString() : undefined,
   };
 }
 

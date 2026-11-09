@@ -5,7 +5,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
+import com.skylane.booking.Gaps;
+
 import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,5 +47,16 @@ public class JdbcStationRepository implements StationRepository {
                     return new Device(rs.getString("code"), station.id(), type, t == null ? null : t.toInstant());
                 },
                 station.id(), type.json());
+    }
+
+    @Override
+    public Instant earliestStart(Device device, Instant from, Duration length) {
+        List<Gaps.Interval> busy = jdbc.query("""
+                SELECT b.starts_at, b.ends_at FROM device_block b JOIN device d ON d.id = b.device_id
+                WHERE d.code = ? AND b.released_at IS NULL AND b.ends_at > ?
+                ORDER BY b.starts_at""",
+                (rs, i) -> new Gaps.Interval(rs.getTimestamp(1).toInstant(), rs.getTimestamp(2).toInstant()),
+                device.code(), Timestamp.from(from));
+        return Gaps.earliestStart(busy, from, length);
     }
 }
