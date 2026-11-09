@@ -331,7 +331,7 @@ MVP 只依赖 4 个外部服务，全部免费。额度来自各家官网的公�
 
 Smart Recommendation、Agent Mode 已细化到第 8 节，作为第二阶段的一部分。
 
-- **Smart Recommendation**：`POST /ai/recommendation`，结合风速（Open-Meteo）、排队情况和用户备注，由 Claude API 给出推荐理由；新增 recommendation 表。
+- **Smart Recommendation**：`POST /ai/recommendation`，结合风速（Open-Meteo）、排队情况和用户备注，由 DeepSeek API 给出推荐理由；新增 recommendation 表。
 - **Agent Mode**：`POST /agent/chat`（SSE）+ 确认接口，对话式下单；新增 conversation、conversation_message、agent_action 表。
 - **其他**：支付和 Checkout、重置密码（需要邮件服务）、收件人免登录追踪链接、接真实设备（启用 location_event 存 GPS 轨迹）。
 
@@ -373,7 +373,7 @@ Smart Recommendation、Agent Mode 已细化到第 8 节，作为第二阶段的�
 
 ### 8.2 推荐与 Agent
 
-沿用第 7 节的方向，具体化如下。模型用 Claude API，Key 只放在后端（`ANTHROPIC_API_KEY`）。
+沿用第 7 节的方向，具体化如下。模型用 DeepSeek API（官方 Anthropic 兼容接口），Key 只放在后端（`DEEPSEEK_API_KEY`）。
 
 | # | 问题 | 决定 | 理由 |
 |---|---|---|---|
@@ -397,6 +397,8 @@ Smart Recommendation、Agent Mode 已细化到第 8 节，作为第二阶段的�
 `/quotes` 的响应只新增可选字段 `recommended_option_id`，不改已有字段。前端：方案页显示推荐标签和理由；新增 `/assistant` 聊天页，操作卡片复用方案卡片组件。
 
 运营方后台可以再加一个只读的运营助手（例如“现在哪个站最忙”“总结今天的延误”），工具只读，放在本阶段最后视时间决定。
+
+当前实现和验证步骤见 [Agent 使用说明](agent.md)：会话、工具、确认/拒绝与聊天页已接入；模型为 DeepSeek，推荐理由暂用规则文案。
 
 ### 8.3 登录与 Account（按第 2–4 节完成）
 

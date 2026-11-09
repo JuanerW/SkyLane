@@ -126,8 +126,10 @@ SkyLane/
 
 | 端 | 要做 |
 |---|---|
-| 后端 | `POST /quotes/{id}/recommendation`（规则选方案，Claude 写理由，失败时只用规则）；`/agent/conversations` 及消息 SSE；工具调用；`agent_action` 确认和拒绝；用户每日限额 |
+| 后端 | `POST /quotes/{id}/recommendation`（规则选方案，DeepSeek 写理由，失败时只用规则）；`/agent/conversations` 及消息 SSE；工具调用；`agent_action` 确认和拒绝；用户每日限额 |
 | 前端 | 方案页推荐标签和理由；`/assistant` 聊天页，下单和取消必须在操作卡片上点确认 |
+
+规则推荐接口和方案页已接入，规则、配置及验证步骤见 [docs/recommendation.md](docs/recommendation.md)。Agent 会话 API、消息 SSE 和工具循环已接入，见 [docs/agent.md](docs/agent.md)。Agent 操作确认/拒绝和 /assistant 聊天页已接入，模型已切换 DeepSeek；推荐理由当前仍使用规则文案。
 
 ### 区块 3：登录与 Account（design 8.3）
 

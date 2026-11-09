@@ -3,7 +3,10 @@ package com.skylane.quote;
 import java.time.Instant;
 import java.util.List;
 
-public record QuoteResponse(String quoteId, Instant expiresAt, List<Option> options) {
+public record QuoteResponse(String quoteId, Instant expiresAt, List<Option> options, String recommendedOptionId) {
+    public QuoteResponse(String quoteId, Instant expiresAt, List<Option> options) {
+        this(quoteId, expiresAt, options, null);
+    }
 
     public record StationRef(String id, String name, double lat, double lng) {
     }

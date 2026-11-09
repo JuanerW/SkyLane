@@ -407,6 +407,15 @@ function route(method: Method, path: string, body: unknown): unknown {
     return { rating, comment: o.detail.review.comment };
   }
   if (method === "POST" && path === "/quotes") return createQuote(body as QuoteRequest);
+  const recommendationPath = path.match(/^\/quotes\/([^/]+)\/recommendation$/);
+  if (method === "POST" && recommendationPath) {
+    const quote = quotes.get(recommendationPath[1]);
+    if (!quote) throw new MockError(404, "QUOTE_NOT_FOUND");
+    if (Date.parse(quote.res.expires_at) <= Date.now()) throw new MockError(409, "QUOTE_EXPIRED");
+    const option = quote.res.options.find(o => o.available && o.tags.includes("recommended")) ?? quote.res.options.find(o => o.available);
+    if (!option) throw new MockError(409, "NO_AVAILABLE_OPTIONS");
+    return { option_id: option.option_id, reason: "Demo recommendation balancing price and arrival time.", factors: { algorithm: "mock", preference: "balanced", weather_status: "unavailable" } };
+  }
   if (method === "POST" && path === "/orders") {
     return createOrder(b.quote_id as string, b.option_id as string, b.recipient as { name: string; phone: string });
   }

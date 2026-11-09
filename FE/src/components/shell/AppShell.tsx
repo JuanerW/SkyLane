@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 const NAV = [
   { href: "/ship", label: "New Delivery" },
   { href: "/orders", label: "My Orders" },
+  { href: "/assistant", label: "Assistant" },
   { href: "/account", label: "Account" },
 ];
 
@@ -18,11 +19,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
+        <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2">
           <Link href="/ship" className="text-lg font-semibold tracking-tight">
             SkyLane
           </Link>
-          <nav className="flex gap-1 text-sm">
+          <nav className="order-3 flex w-full flex-wrap gap-1 text-sm sm:order-none sm:w-auto">
             {NAV.map((n) => {
               const active = pathname === n.href || pathname.startsWith(`${n.href}/`);
               return (
