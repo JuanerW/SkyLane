@@ -95,7 +95,7 @@ public class OpsService {
                     WHERE device_id = d.id AND released_at IS NULL AND starts_at <= ? AND ends_at > ?
                     ORDER BY starts_at DESC LIMIT 1) b ON TRUE
                 LEFT JOIN delivery_order o ON o.id = b.order_id
-                WHERE """ + where + " ORDER BY s.name, d.device_type, d.code",
+                WHERE """ + " " + where + " ORDER BY s.name, d.device_type, d.code",
                 (rs, i) -> new RawDevice(rs.getObject("id", UUID.class), rs.getString("code"),
                         rs.getString("device_type"), rs.getString("status"), rs.getObject("station_id", UUID.class),
                         rs.getString("station_name"), rs.getObject("operator_id", UUID.class),
@@ -171,7 +171,7 @@ public class OpsService {
                 SELECT count(*) FILTER (WHERE o.created_at >= ?) AS today,
                        count(*) FILTER (WHERE o.status IN ('dispatched', 'picked_up', 'in_transit', 'arrived')) AS active,
                        count(*) FILTER (WHERE o.status = 'confirmed' AND o.departs_at > ?) AS scheduled
-                FROM delivery_order o JOIN device d ON d.id = o.device_id WHERE """ + where, args.toArray());
+                FROM delivery_order o JOIN device d ON d.id = o.device_id WHERE """ + " " + where, args.toArray());
         return new Overview(stations, num(row.get("today")), num(row.get("active")), num(row.get("scheduled")));
     }
 
@@ -264,7 +264,7 @@ public class OpsService {
                        o.eta_at, o.completed_at
                 FROM delivery_order o JOIN device d ON d.id = o.device_id JOIN station s ON s.id = d.station_id
                 WHERE """);
-        sql.append(scope(actor, args));
+        sql.append(" ").append(scope(actor, args));
         if (status != null && !status.isBlank()) {
             if ("active".equals(status)) {
                 sql.append(" AND o.status IN ('dispatched', 'picked_up', 'in_transit', 'arrived')");
@@ -314,7 +314,7 @@ public class OpsService {
                        avg(CASE WHEN o.completed_at <= o.eta_at THEN 1.0 ELSE 0.0 END) AS on_time,
                        avg(extract(epoch FROM o.completed_at - o.departs_at) / 60.0) AS avg_minutes
                 FROM delivery_order o JOIN device d ON d.id = o.device_id
-                WHERE o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ? AND """ + where,
+                WHERE o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ? AND """ + " " + where,
                 args.toArray());
 
         Map<Integer, Integer> ratings = new LinkedHashMap<>();
@@ -326,7 +326,7 @@ public class OpsService {
         jdbc.query("""
                 SELECT r.rating, count(*) AS n FROM delivery_review r
                 JOIN delivery_order o ON o.id = r.order_id JOIN device d ON d.id = o.device_id
-                WHERE r.created_at >= ? AND r.created_at < ? AND """ + where + " GROUP BY r.rating",
+                WHERE r.created_at >= ? AND r.created_at < ? AND """ + " " + where + " GROUP BY r.rating",
                 rs -> {
                     ratings.put(rs.getInt("rating"), rs.getInt("n"));
                 }, args.toArray());
