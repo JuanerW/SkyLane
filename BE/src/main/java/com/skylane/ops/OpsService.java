@@ -261,7 +261,9 @@ public class OpsService {
         StringBuilder sql = new StringBuilder("""
                 SELECT o.id, o.status, d.code, o.device_type, s.name AS station_name, o.recipient_name,
                        o.recipient_phone, o.pickup_text, o.dropoff_text, o.price_cents, o.created_at, o.departs_at,
-                       o.eta_at, o.completed_at
+                       o.eta_at, o.completed_at,
+                       (SELECT min(e.occurred_at) FROM order_event e
+                        WHERE e.order_id = o.id AND e.status = 'arrived') AS arrived_at
                 FROM delivery_order o JOIN device d ON d.id = o.device_id JOIN station s ON s.id = d.station_id
                 WHERE """);
         sql.append(" ").append(scope(actor, args));
@@ -290,8 +292,10 @@ public class OpsService {
             Instant eta = instant(rs, "eta_at");
             Instant done = instant(rs, "completed_at");
             String st = rs.getString("status");
-            // D44: highlight orders running past their ETA.
-            boolean late = done != null ? done.isAfter(eta)
+            // D44: highlight orders running past their ETA. eta_at is the arrival at the recipient, so compare
+            // the arrival time; completion comes later by design (the hand-over stop).
+            Instant arrived = instant(rs, "arrived_at");
+            boolean late = arrived != null ? arrived.isAfter(eta)
                     : Set.of("dispatched", "picked_up", "in_transit", "arrived").contains(st) && now.isAfter(eta);
             return new OpsOrder(rs.getObject("id").toString(), st, rs.getString("code"), rs.getString("device_type"),
                     rs.getString("station_name"), rs.getString("recipient_name"),
@@ -311,7 +315,10 @@ public class OpsService {
         String where = scope(actor, args);
         Map<String, Object> row = jdbc.queryForMap("""
                 SELECT count(*) AS completed,
-                       avg(CASE WHEN o.completed_at <= o.eta_at THEN 1.0 ELSE 0.0 END) AS on_time,
+                       -- On time = arrived at the recipient by eta_at (eta_at is the arrival, not the hand-over).
+                       avg(CASE WHEN (SELECT min(e.occurred_at) FROM order_event e
+                                      WHERE e.order_id = o.id AND e.status = 'arrived') <= o.eta_at
+                                THEN 1.0 ELSE 0.0 END) AS on_time,
                        avg(extract(epoch FROM o.completed_at - o.departs_at) / 60.0) AS avg_minutes
                 FROM delivery_order o JOIN device d ON d.id = o.device_id
                 WHERE o.status = 'completed' AND o.completed_at >= ? AND o.completed_at < ? AND """ + " " + where,
