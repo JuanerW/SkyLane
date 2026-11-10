@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { setToken } from "@/lib/auth";
 import { GoogleSignInButton, GOOGLE_CLIENT_ID } from "@/components/account/GoogleSignInButton";
 import type { User } from "@/types/contract";
+import { Logo } from "@/components/ui/Logo";
 
 interface AuthResponse {
   access_token: string;
@@ -78,7 +79,7 @@ function LoginForm() {
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">SkyLane</h1>
+          <h1 className="text-xl font-semibold text-slate-900"><Logo size={28} /></h1>
           <p className="text-sm text-slate-500">{mode === "login" ? "Sign in to continue" : "Create your account"}</p>
         </div>
 

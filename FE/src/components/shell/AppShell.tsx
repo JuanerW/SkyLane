@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { USE_MOCK } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { Logo } from "@/components/ui/Logo";
 
 const NAV = [
   { href: "/ship", label: "New Delivery" },
@@ -21,8 +22,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         {/* Phones: the nav drops to its own row under the logo and scrolls sideways if it has to. */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 sm:h-14 sm:flex-nowrap sm:py-0">
-          <Link href="/" className="text-lg font-semibold tracking-tight">
-            SkyLane
+          <Link href="/" className="text-lg font-semibold tracking-tight" aria-label="SkyLane home">
+            <Logo size={26} />
           </Link>
           <nav className="order-last -mx-4 flex w-[calc(100%+2rem)] gap-1 overflow-x-auto whitespace-nowrap px-4 text-sm [scrollbar-width:none] sm:order-none sm:mx-0 sm:w-auto sm:px-0">
             {/* Design 8.1: operators and admins also get the Ops entry. */}
