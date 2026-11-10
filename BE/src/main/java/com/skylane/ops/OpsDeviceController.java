@@ -20,7 +20,7 @@ import java.util.UUID;
  */
 @RestController
 @Profile("!memory")
-@RequestMapping("/api/v1/ops/devices")
+@RequestMapping("/api/v1/ops/devices/summary")
 public class OpsDeviceController {
 
     private final JdbcTemplate jdbc;
