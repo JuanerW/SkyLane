@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CoverageMap } from "@/components/home/CoverageMap";
 import { HeaderActions, StartButton } from "@/components/home/AuthActions";
+import { Logo } from "@/components/ui/Logo";
 
 // Public home page (design 8.5). Signed-in visitors see it too; the header then offers New Delivery.
 
@@ -88,8 +89,8 @@ export default function HomePage() {
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
-          <Link href="/" className="text-lg font-semibold tracking-tight">
-            SkyLane
+          <Link href="/" className="text-lg font-semibold tracking-tight" aria-label="SkyLane home">
+            <Logo size={26} />
           </Link>
           <nav className="hidden items-center gap-1 text-sm font-medium text-slate-600 md:flex" aria-label="Sections">
             <a href="#how" className="rounded-md px-3 py-2 hover:bg-slate-100">

@@ -36,6 +36,8 @@ export interface DeliveryMapProps {
   area?: { minLat: number; maxLat: number; minLng: number; maxLng: number };
   /** Live device position, for tracking. */
   device?: { deviceType: DeviceType; lat: number; lng: number } | null;
+  /** Many live devices at once (ops overview, design 8.1). Idle ones are drawn faded. */
+  fleet?: { id: string; deviceType: DeviceType; lat: number; lng: number; state: string; label?: string }[];
   legend?: boolean;
   className?: string;
 }
@@ -106,6 +108,7 @@ export default function DeliveryMap({
   dropoff,
   area,
   device,
+  fleet,
   legend,
   className,
 }: DeliveryMapProps) {
@@ -264,6 +267,43 @@ export default function DeliveryMap({
     });
     return () => cancelAnimationFrame(frame);
   }, [ready, deviceType, lat, lng]);
+
+  // Fleet: one marker per device id, moved in place on every update.
+  const fleetMarkers = useRef(new Map<string, maplibregl.Marker>());
+  const fleetKey = JSON.stringify(fleet ?? []);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    const list = JSON.parse(fleetKey) as NonNullable<DeliveryMapProps["fleet"]>;
+    const seen = new Set<string>();
+    for (const d of list) {
+      seen.add(d.id);
+      let m = fleetMarkers.current.get(d.id);
+      if (!m) {
+        const el = devicePin(d.deviceType);
+        el.style.width = el.style.height = "28px";
+        m = new maplibregl.Marker({ element: el }).setLngLat([d.lng, d.lat]).addTo(map);
+        fleetMarkers.current.set(d.id, m);
+      }
+      m.setLngLat([d.lng, d.lat]);
+      const el = m.getElement();
+      el.style.opacity = d.state === "on_order" || d.state === "returning" ? "1" : "0.45";
+      el.title = d.label ?? d.id;
+    }
+    fleetMarkers.current.forEach((m, id) => {
+      if (!seen.has(id)) {
+        m.remove();
+        fleetMarkers.current.delete(id);
+      }
+    });
+  }, [ready, fleetKey]);
+  useEffect(() => {
+    const markers = fleetMarkers.current;
+    return () => {
+      markers.forEach((m) => m.remove());
+      markers.clear();
+    };
+  }, []);
 
   return (
     <div className={`relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100 ${className ?? ""}`}>

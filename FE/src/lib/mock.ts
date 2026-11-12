@@ -440,6 +440,8 @@ function createQuote(req: QuoteRequest): QuoteResponse {
   const now = Date.now();
   const p: LatLngTuple = [req.pickup.lat, req.pickup.lng];
   const d: LatLngTuple = [req.dropoff.lat, req.dropoff.lng];
+  // Design 8.4: a booked pickup moves every departure to that time.
+  const start = req.pickup_after ? Math.max(now, new Date(req.pickup_after).getTime()) : now;
   const options: QuoteOption[] = STATIONS.flatMap((st, i) =>
     (["robot", "drone"] as const).map((type) => {
       const s: LatLngTuple = [st.lat, st.lng];
@@ -457,9 +459,9 @@ function createQuote(req: QuoteRequest): QuoteResponse {
       if (reason) return { ...out, available: false, unavailable_reason: reason };
 
       // The second station's drone is busy, so at least one card shows "Next free".
-      const departs = now + (type === "drone" && i === 1 ? 12 * MIN : 0);
+      const departs = start + (type === "drone" && i === 1 ? 12 * MIN : 0);
       const eta = departs + (distance / (type === "drone" ? 15 : 2) + (type === "drone" ? 120 : 300)) * 1000;
-      if (req.arrive_within_minutes && eta > now + req.arrive_within_minutes * MIN) {
+      if (req.arrive_within_minutes && eta > start + req.arrive_within_minutes * MIN) {
         return { ...out, available: false, unavailable_reason: "DEADLINE_MISSED" };
       }
       const miles = distance / 1609.344;

@@ -1,6 +1,8 @@
 package com.skylane.quote;
 
+import com.skylane.booking.PickupTime;
 import com.skylane.common.ApiException;
+import com.skylane.config.BookingProperties;
 import com.skylane.config.PricingProperties;
 import com.skylane.config.QuoteProperties;
 import com.skylane.config.ServiceAreaProperties;
@@ -39,9 +41,11 @@ public class QuoteService {
     private final ServiceAreaProperties area;
     private final QuoteRepository quotes;
     private final Clock clock;
+    private final BookingProperties booking;
 
     public QuoteService(StationRepository stations, RoutingClient routing, QuoteProperties props,
-                        PricingProperties pricing, ServiceAreaProperties area, QuoteRepository quotes, Clock clock) {
+                        PricingProperties pricing, ServiceAreaProperties area, QuoteRepository quotes, Clock clock,
+                        BookingProperties booking) {
         this.stations = stations;
         this.routing = routing;
         this.props = props;
@@ -49,6 +53,7 @@ public class QuoteService {
         this.area = area;
         this.quotes = quotes;
         this.clock = clock;
+        this.booking = booking;
     }
 
     public QuoteResponse createQuote(UUID userId, QuoteRequest req) {
@@ -61,7 +66,8 @@ public class QuoteService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "SAME_ADDRESS", "Pickup and drop-off are the same address");
         }
 
-        Instant now = clock.instant();
+        Instant now = PickupTime.validate(req.pickupAfter(), clock.instant(), booking);
+        // D39: the deadline counts from pickup_after when it is set.
         Instant deadline = req.arriveWithinMinutes() == null ? null : now.plus(Duration.ofMinutes(req.arriveWithinMinutes()));
         // quote.weight_kg is numeric(5,2): round once so the price, the checks and the stored value all agree
         BigDecimal weight = BigDecimal.valueOf(req.weightKg()).setScale(2, RoundingMode.HALF_UP);
@@ -87,8 +93,8 @@ public class QuoteService {
         }
 
         UUID quoteId = UUID.randomUUID();
-        Instant expiresAt = now.plus(Duration.ofMinutes(props.ttlMinutes()));
-        quotes.save(new QuoteRepository.NewQuote(quoteId, userId, req, weight, pickup, dropoff, deadline, expiresAt, taggedRows));
+        Instant expiresAt = clock.instant().plus(Duration.ofMinutes(props.ttlMinutes()));
+        quotes.save(new QuoteRepository.NewQuote(quoteId, userId, req, weight, pickup, dropoff, deadline, expiresAt, taggedRows, req.pickupAfter()));
         return new QuoteResponse(quoteId.toString(), expiresAt, tagged);
     }
 
@@ -117,11 +123,17 @@ public class QuoteService {
         }
 
         List<Device> devices = stations.findActiveDevices(station, type);
-        Instant departs = devices.stream()
-                .map(d -> d.availableAt() == null || d.availableAt().isBefore(now) ? now : d.availableAt())
-                .min(Comparator.naturalOrder()).orElse(now);
-        long travelSeconds = Math.round(route.totalM() / (type == DeviceType.ROBOT ? props.robotSpeedMps() : props.droneSpeedMps()));
+        double speed = type == DeviceType.ROBOT ? props.robotSpeedMps() : props.droneSpeedMps();
+        long travelSeconds = Math.round(route.totalM() / speed);
         long extraMinutes = props.handlingMinutes() + (type == DeviceType.DRONE ? props.droneOverheadMinutes() : 0);
+        // D40/D42: the slot covers outbound + return + safety buffer; take the earliest gap on any device.
+        LatLng drop = route.points().get(route.points().size() - 1);
+        double returnM = Geo.haversineM(drop, station.location()) * (type == DeviceType.ROBOT ? 1.3 : 1);
+        Duration occupation = Duration.ofSeconds(travelSeconds + Math.round(returnM / speed)).plusMinutes(extraMinutes);
+        Duration slot = occupation.plus(booking.buffer(occupation));
+        Instant departs = devices.stream()
+                .map(d -> stations.earliestStart(d, now, slot))
+                .min(Comparator.naturalOrder()).orElse(now);
         Instant eta = departs.plusSeconds(travelSeconds).plus(Duration.ofMinutes(extraMinutes));
         int price = priceCents(weight, route.leg2M(), type);
 

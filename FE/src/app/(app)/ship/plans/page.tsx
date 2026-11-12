@@ -245,7 +245,16 @@ export default function PlansPage() {
             </div>
           )}
 
-          {quote.isError && !quoteCode?.match(/OUT_OF_SERVICE_AREA|SAME_ADDRESS/) && (
+          {quoteCode === "PICKUP_TIME_INVALID" && (
+            <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
+              <div className="mb-3">{(quote.error as Error).message}</div>
+              <Link href="/ship" className="ghost">
+                Change pickup time
+              </Link>
+            </div>
+          )}
+
+          {quote.isError && !quoteCode?.match(/OUT_OF_SERVICE_AREA|SAME_ADDRESS|PICKUP_TIME_INVALID/) && (
             <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3.5 text-sm text-amber-900">
               <div className="mb-3">Could not load delivery options.</div>
               <button type="button" className="ghost" onClick={() => refetch()}>

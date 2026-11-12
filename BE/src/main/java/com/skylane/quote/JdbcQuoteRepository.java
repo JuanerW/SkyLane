@@ -32,15 +32,15 @@ public class JdbcQuoteRepository implements QuoteRepository {
         jdbc.update("""
                 INSERT INTO quote (id, user_id, item_description, is_fragile, weight_kg, notes,
                                    pickup_text, pickup_location, dropoff_text, dropoff_location,
-                                   deadline_at, expires_at, algorithm_version)
+                                   deadline_at, expires_at, algorithm_version, pickup_after)
                 VALUES (?, ?, ?, ?, ?, ?,
                         ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
                         ?, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
-                        ?, ?, ?)""",
+                        ?, ?, ?, ?)""",
                 q.id(), q.userId(), r.item().description(), r.item().fragile(), q.weightKg(), r.notes(),
                 r.pickup().text(), q.pickup().lng(), q.pickup().lat(),
                 r.dropoff().text(), q.dropoff().lng(), q.dropoff().lat(),
-                utc(q.deadline()), utc(q.expiresAt()), ALGORITHM_VERSION);
+                utc(q.deadline()), utc(q.expiresAt()), ALGORITHM_VERSION, utc(q.pickupAfter()));
 
         for (OptionRow row : q.options()) {
             QuoteResponse.Option o = row.option();

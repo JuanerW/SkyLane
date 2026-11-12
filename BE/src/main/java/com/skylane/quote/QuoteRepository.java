@@ -14,7 +14,7 @@ public interface QuoteRepository {
     }
 
     record NewQuote(UUID id, UUID userId, QuoteRequest request, BigDecimal weightKg, LatLng pickup, LatLng dropoff,
-                    Instant deadline, Instant expiresAt, List<OptionRow> options) {
+                    Instant deadline, Instant expiresAt, List<OptionRow> options, Instant pickupAfter) {
     }
 
     /** Saves the quote and its option rows in one transaction. */

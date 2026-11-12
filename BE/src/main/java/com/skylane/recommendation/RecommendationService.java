@@ -22,9 +22,11 @@ public class RecommendationService {
     private final Clock clock;
     private final WindClient weather;
     private final double windThreshold;
+    private final ReasonWriter reasons;
     public RecommendationService(JdbcTemplate jdbc, ObjectMapper mapper, Clock clock, WindClient weather,
-                                 @Value("${skylane.recommendation.wind-threshold-mps:10}") double windThreshold) {
-        this.jdbc = jdbc; this.mapper = mapper; this.clock = clock; this.weather = weather;
+                                 @Value("${skylane.recommendation.wind-threshold-mps:10}") double windThreshold,
+                                 ReasonWriter reasons) {
+        this.jdbc = jdbc; this.mapper = mapper; this.clock = clock; this.weather = weather; this.reasons = reasons;
         if (!Double.isFinite(windThreshold) || windThreshold <= 0) throw new IllegalArgumentException("Wind threshold must be positive");
         this.windThreshold = windThreshold;
     }
@@ -52,9 +54,12 @@ public class RecommendationService {
                 rs.getInt("price_cents"), rs.getTimestamp("departs_at").toInstant(), rs.getTimestamp("eta_at").toInstant()), quoteId);
         if (options.isEmpty()) throw new ApiException(HttpStatus.CONFLICT, "NO_AVAILABLE_OPTIONS", "No delivery option is available");
         var result = RecommendationRules.choose(options, quote.notes(), now, weather.currentWind(quote.lat(), quote.lng()), windThreshold);
-        jdbc.update("INSERT INTO recommendation (quote_id, option_id, reason, factors, model) VALUES (?, ?, ?, ?::jsonb, NULL)",
-                quoteId, result.optionId(), result.reason(), json(result.factors()));
-        return new Response(result.optionId(), result.reason(), result.factors());
+        // D34: DeepSeek may reword the reason; on any failure the rule text is kept and model stays NULL.
+        Optional<String> llm = reasons.write(result.reason(), result.factors(), quote.notes());
+        String reason = llm.orElse(result.reason());
+        jdbc.update("INSERT INTO recommendation (quote_id, option_id, reason, factors, model) VALUES (?, ?, ?, ?::jsonb, ?)",
+                quoteId, result.optionId(), reason, json(result.factors()), llm.isPresent() ? reasons.model() : null);
+        return new Response(result.optionId(), reason, result.factors());
     }
     private Map<String, Object> factors(String value) {
         try { return mapper.readValue(value, new TypeReference<Map<String, Object>>() {}); }

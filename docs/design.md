@@ -364,7 +364,7 @@ Smart Recommendation、Agent Mode 已细化到第 8 节，作为第二阶段的�
 | PATCH | `/ops/devices/{id}` | status、station_id；有未来占用时改站点或停用返回 409 `DEVICE_HAS_BOOKINGS` |
 | GET | `/ops/devices/{id}/schedule` | 这台设备今天和未来的占用（order / return），供预约排班查看 |
 | GET | `/ops/orders?status=&from=&to=` | 可见范围内的订单 |
-| GET | `/ops/metrics?from=&to=` | 准点率（completed_at ≤ eta_at）、平均配送时长、评分分布、设备利用率 |
+| GET | `/ops/metrics?from=&to=` | 准点率（到达时间 ≤ eta_at：到达时间取 `order_event` 里 `arrived` 的时间；eta_at 是到达收件地址的时间，completed 还要再加卸货停留，所以不能用 completed_at 比较）、平均配送时长、评分分布、设备利用率 |
 | POST | `/admin/operators` | 仅 admin：创建公司 |
 | POST | `/admin/users` | 仅 admin：创建 operator 账号 |
 | PATCH | `/admin/users/{id}` | 仅 admin：禁用（`disabled_at`）、强制下线（`token_version` 加 1） |
