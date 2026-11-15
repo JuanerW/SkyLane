@@ -389,9 +389,23 @@ public class OrderService {
     }
 
     /** The DB stores E.164. Accept what people type: "(415) 555-0100" becomes +14155550100. */
-    static String normalizePhone(String raw) {
+    public static String normalizePhone(String raw) {
+        if (raw == null || !raw.trim().matches("\\+?[0-9().\\s-]+")) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Enter a phone number using digits and an optional leading +.");
+        }
         String digits = raw.replaceAll("[^0-9]", "");
         String e164 = raw.trim().startsWith("+") ? "+" + digits : digits.length() == 10 ? "+1" + digits : "+" + digits;
+        if (e164.startsWith("+1")) {
+            if (e164.length() != 12) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "A +1 phone number must have 10 digits after +1.");
+            }
+            if (e164.charAt(2) < '2') {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "The area code after +1 must start with a digit from 2 to 9.");
+            }
+            if (e164.charAt(5) < '2') {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "The three-digit prefix after the area code must start with a digit from 2 to 9.");
+            }
+        }
         if (!e164.matches("^\\+[1-9][0-9]{7,14}$")) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "recipient.phone is not a valid phone number");
         }

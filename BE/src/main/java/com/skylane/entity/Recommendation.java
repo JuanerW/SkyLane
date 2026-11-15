@@ -7,17 +7,20 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-/** Recommended option of a quote; rules pick it, the LLM only writes the reason (design.md D34). */
+/** Rule-based recommendation for a quote and delivery preference. */
 @Entity
-@Table(name = "recommendation")
+@Table(name = "recommendation", uniqueConstraints = @UniqueConstraint(columnNames = {"quote_id", "preference"}))
 @Getter @Setter @NoArgsConstructor
 public class Recommendation extends BaseEntity {
     @Id @GeneratedValue(strategy = GenerationType.UUID)
     private java.util.UUID id;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "quote_id", nullable = false, unique = true)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "quote_id", nullable = false)
     private Quote quote;
+
+    @Column(nullable = false, columnDefinition = "text")
+    private String preference;
 
     @Column(name = "option_id", nullable = false)
     private java.util.UUID optionId;

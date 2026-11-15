@@ -108,6 +108,19 @@
     }
   },
   {
+    "name": "recommend_delivery",
+    "description": "Rank available options for an existing quote using the same delivery preferences and wind adjustment as the Plans page.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "quote_id": { "type": "string" },
+        "preference": { "type": "string", "enum": ["balanced", "price", "speed"] }
+      },
+      "required": ["quote_id", "preference"],
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "get_order",
     "description": "Read one order belonging to this customer.",
     "input_schema": {

@@ -5,6 +5,8 @@ import com.skylane.common.ApiException;
 import com.skylane.order.OrderService;
 import com.skylane.order.OrderDtos.Recipient;
 import com.skylane.quote.*;
+import com.skylane.recommendation.RecommendationRules.Preference;
+import com.skylane.recommendation.RecommendationService;
 import jakarta.validation.Validator;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
@@ -17,12 +19,14 @@ import java.util.*;
 public class AgentTools {
  public record Outcome(JsonNode content,AgentStore.Action action){}
  private final QuoteService quotes;private final OrderService orders;private final AddressSearch address;
+ private final RecommendationService recommendations;
  private final AgentStore store;private final ObjectMapper mapper;private final Validator validator;
  private final JdbcTemplate jdbc;private final Clock clock;private final AgentProperties props;
  public AgentTools(QuoteService quotes,OrderService orders,AddressSearch address,AgentStore store,
-    ObjectMapper mapper,Validator validator,JdbcTemplate jdbc,Clock clock,AgentProperties props){
+    ObjectMapper mapper,Validator validator,JdbcTemplate jdbc,Clock clock,AgentProperties props,RecommendationService recommendations){
   this.quotes=quotes;this.orders=orders;this.address=address;this.store=store;
   this.mapper=mapper;this.validator=validator;this.jdbc=jdbc;this.clock=clock;this.props=props;
+  this.recommendations=recommendations;
  }
  public Outcome execute(AgentStore.Turn turn,String name,JsonNode input){
   if(!input.isObject())throw invalid();
@@ -42,6 +46,16 @@ public class AgentTools {
     result.path("options").forEach(o->((ObjectNode)o).remove("route_points"));
     yield new Outcome(result,null);
    }
+   case "recommend_delivery" -> {
+    UUID quote=uuid(input,"quote_id");
+    Preference preference=switch(text(input,"preference",8)){
+     case "balanced" -> Preference.BALANCED;
+     case "price" -> Preference.PRICE;
+     case "speed" -> Preference.SPEED;
+     default -> throw invalid();
+    };
+    yield new Outcome(mapper.valueToTree(recommendations.recommend(turn.userId(),quote,preference)),null);
+   }
    case "get_order" -> {
     ObjectNode result=mapper.valueToTree(orders.get(turn.userId(),uuid(input,"order_id")));
     result.remove("route_points");yield new Outcome(result,null);
@@ -56,7 +70,7 @@ public class AgentTools {
     Recipient recipient;
     try{recipient=mapper.treeToValue(input.path("recipient"),Recipient.class);}catch(Exception e){throw invalid();}
     validate(recipient);
-    if(!recipient.phone().matches("^\\+[1-9][0-9]{7,14}$"))throw invalid();
+    recipient = new Recipient(recipient.name(), OrderService.normalizePhone(recipient.phone()));
     List<Instant> expiry=jdbc.query("""
      SELECT q.expires_at FROM quote q JOIN quote_option o ON o.quote_id=q.id
      WHERE q.id=? AND q.user_id=? AND o.id=? AND o.available=true

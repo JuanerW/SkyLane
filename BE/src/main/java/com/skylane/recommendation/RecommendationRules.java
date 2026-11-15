@@ -10,14 +10,29 @@ public final class RecommendationRules {
     public record Option(UUID id, String deviceType, int priceCents, Instant departsAt, Instant etaAt) {}
     public record Result(UUID optionId, String reason, Map<String, Object> factors) {}
 
-    public static Result choose(List<Option> options, String notes, Instant now, Double windMps, double windThreshold) {
-        if (options.isEmpty()) throw new ApiException(HttpStatus.CONFLICT, "NO_AVAILABLE_OPTIONS", "No delivery option is available");
+    public enum Preference {
+        BALANCED, PRICE, SPEED;
+
+        public String key() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    static Preference preferenceFromNotes(String notes) {
         String text = notes == null ? "" : notes.toLowerCase(Locale.ROOT);
         boolean cheap = contains(text, "cheap", "budget", "lowest cost", "便宜", "省钱", "低价");
         boolean fast = contains(text, "urgent", "fast", "as soon", "尽快", "加急", "最快");
-        String preference = cheap == fast ? "balanced" : cheap ? "price" : "speed";
-        double pw = preference.equals("price") ? .75 : preference.equals("speed") ? .15 : .40;
-        double tw = preference.equals("speed") ? .75 : preference.equals("price") ? .15 : .45;
+        return cheap == fast ? Preference.BALANCED : cheap ? Preference.PRICE : Preference.SPEED;
+    }
+
+    public static Result choose(List<Option> options, String notes, Instant now, Double windMps, double windThreshold) {
+        return choose(options, preferenceFromNotes(notes), now, windMps, windThreshold);
+    }
+
+    static Result choose(List<Option> options, Preference preference, Instant now, Double windMps, double windThreshold) {
+        if (options.isEmpty()) throw new ApiException(HttpStatus.CONFLICT, "NO_AVAILABLE_OPTIONS", "No delivery option is available");
+        double pw = preference == Preference.PRICE ? .75 : preference == Preference.SPEED ? .15 : .40;
+        double tw = preference == Preference.SPEED ? .75 : preference == Preference.PRICE ? .15 : .45;
         double ww = 1 - pw - tw;
         double minPrice = options.stream().mapToInt(Option::priceCents).min().orElseThrow();
         double maxPrice = options.stream().mapToInt(Option::priceCents).max().orElseThrow();
@@ -38,7 +53,7 @@ public final class RecommendationRules {
                 .thenComparing(Option::etaAt).thenComparingInt(Option::priceCents).thenComparing(o -> o.id().toString())).orElseThrow();
         Map<String, Object> factors = new LinkedHashMap<>();
         factors.put("algorithm", "rules-v1");
-        factors.put("preference", preference);
+        factors.put("preference", preference.key());
         factors.put("price_cents", best.priceCents());
         factors.put("eta_at", best.etaAt().toString());
         factors.put("queue_seconds", Math.round(waitSeconds(best, now)));
@@ -48,9 +63,9 @@ public final class RecommendationRules {
         factors.put("wind_threshold_mps", windThreshold);
         factors.put("drone_wind_penalty", windy ? .35 : 0);
         String reason = switch (preference) {
-            case "price" -> "Recommended for your budget preference, balancing price with arrival and queue time.";
-            case "speed" -> "Recommended for your speed preference, balancing arrival and queue time with price.";
-            default -> "Recommended for its balance of price, arrival time and time waiting to depart.";
+            case PRICE -> "Recommended for your budget preference, balancing price with arrival and queue time.";
+            case SPEED -> "Recommended for your speed preference, balancing arrival and queue time with price.";
+            case BALANCED -> "Recommended for its balance of price, arrival time and time waiting to depart.";
         };
         if (windy) reason += " Current wind lowers the ranking of drone options.";
         if (windMps == null) reason += " Live wind data is unavailable; this recommendation uses the delivery quote.";

@@ -30,6 +30,11 @@ public class RecommendationService {
     }
     @Transactional
     public Response recommend(UUID userId, UUID quoteId) {
+        return recommend(userId, quoteId, null);
+    }
+
+    @Transactional
+    public Response recommend(UUID userId, UUID quoteId, RecommendationRules.Preference requestedPreference) {
         // Lock the owned quote to serialize concurrent requests, including the first cache insertion.
         List<Quote> quotes = jdbc.query("""
                 SELECT expires_at, notes, ST_Y(pickup_location::geometry) AS lat,
@@ -41,8 +46,11 @@ public class RecommendationService {
         Quote quote = quotes.getFirst();
         Instant now = clock.instant();
         if (!quote.expiresAt().isAfter(now)) throw new ApiException(HttpStatus.CONFLICT, "QUOTE_EXPIRED", "Please refresh delivery options");
-        List<Response> cached = jdbc.query("SELECT option_id, reason, factors::text FROM recommendation WHERE quote_id = ?",
-                (rs, i) -> new Response(rs.getObject("option_id", UUID.class), rs.getString("reason"), factors(rs.getString("factors"))), quoteId);
+        var preference = requestedPreference == null ? RecommendationRules.preferenceFromNotes(quote.notes()) : requestedPreference;
+        List<Response> cached = jdbc.query("""
+                SELECT option_id, reason, factors::text FROM recommendation WHERE quote_id = ? AND preference = ?
+                """, (rs, i) -> new Response(rs.getObject("option_id", UUID.class), rs.getString("reason"),
+                factors(rs.getString("factors"))), quoteId, preference.key());
         if (!cached.isEmpty()) return cached.getFirst();
         List<RecommendationRules.Option> options = jdbc.query("""
                 SELECT id, device_type, price_cents, departs_at, eta_at FROM quote_option
@@ -51,9 +59,11 @@ public class RecommendationService {
                 """, (rs, i) -> new RecommendationRules.Option(rs.getObject("id", UUID.class), rs.getString("device_type"),
                 rs.getInt("price_cents"), rs.getTimestamp("departs_at").toInstant(), rs.getTimestamp("eta_at").toInstant()), quoteId);
         if (options.isEmpty()) throw new ApiException(HttpStatus.CONFLICT, "NO_AVAILABLE_OPTIONS", "No delivery option is available");
-        var result = RecommendationRules.choose(options, quote.notes(), now, weather.currentWind(quote.lat(), quote.lng()), windThreshold);
-        jdbc.update("INSERT INTO recommendation (quote_id, option_id, reason, factors, model) VALUES (?, ?, ?, ?::jsonb, NULL)",
-                quoteId, result.optionId(), result.reason(), json(result.factors()));
+        var result = RecommendationRules.choose(options, preference, now, weather.currentWind(quote.lat(), quote.lng()), windThreshold);
+        jdbc.update("""
+                INSERT INTO recommendation (quote_id, preference, option_id, reason, factors, model)
+                VALUES (?, ?, ?, ?, ?::jsonb, NULL)
+                """, quoteId, preference.key(), result.optionId(), result.reason(), json(result.factors()));
         return new Response(result.optionId(), result.reason(), result.factors());
     }
     private Map<String, Object> factors(String value) {

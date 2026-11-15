@@ -41,6 +41,7 @@ class AgentDatabaseTest {
  @Autowired com.skylane.order.OrderService orderService;
  @MockBean AgentModel model;
  @MockBean AddressSearch address;
+ @MockBean com.skylane.recommendation.WindClient wind;
  private UUID user;
  @BeforeEach void setup(){
   user=newUser();
@@ -145,6 +146,7 @@ class AgentDatabaseTest {
  @Test void addressQuoteAndOrderProposalUseToolsWithoutPlacingOrder(){
   UUID c=create();int before=jdbc.queryForObject("SELECT count(*) FROM delivery_order",Integer.class);
   AtomicInteger round=new AtomicInteger();
+  List<String> quoteIds=new ArrayList<>();
   when(address.search(anyString())).thenReturn(mapper.valueToTree(Map.of("places",List.of(Map.of("text","Ferry Building","lat",37.7955,"lng",-122.3937)))));
   when(model.reply(anyList(),any())).thenAnswer(call->{
    List<JsonNode> messages=call.getArgument(0);
@@ -159,15 +161,20 @@ class AgentDatabaseTest {
      JsonNode result=store.parse(messages.getLast().path("content").get(0).path("content").asText());
      assertThat(messages.getLast().path("role").asText()).isEqualTo("user");
      assertThat(result.path("options").get(0).has("route_points")).isFalse();
-     JsonNode option=null;for(JsonNode o:result.path("options"))if(o.path("available").asBoolean()){option=o;break;}
-     assertThat(option).isNotNull();
-     yield reply(tool("propose_order",Map.of("quote_id",result.path("quote_id").asText(),"option_id",option.path("option_id").asText(),
+     String quoteId=result.path("quote_id").asText();
+     quoteIds.add(quoteId);
+     yield reply(tool("recommend_delivery",Map.of("quote_id",quoteId,"preference","price")));
+    }
+    case 3 -> {
+     JsonNode result=store.parse(messages.getLast().path("content").get(0).path("content").asText());
+     assertThat(result.path("factors").path("preference").asText()).isEqualTo("price");
+     yield reply(tool("propose_order",Map.of("quote_id",quoteIds.getFirst(),"option_id",result.path("option_id").asText(),
       "recipient",Map.of("name","Jamie","phone","+14155550100"))));
     }
     default -> reply(text("Please confirm the pending delivery card."));
    };
   });
-  var res=send(user,c,"Please quote and propose this delivery");successful(res);
+  var res=send(user,c,"Please quote and propose a budget-friendly delivery");successful(res);
   assertThat(res.getBody()).contains("event:action","place_order","pending");
   assertThat(jdbc.queryForObject("SELECT count(*) FROM agent_action WHERE conversation_id=? AND status='pending'",Integer.class,c)).isEqualTo(1);
   assertThat(jdbc.queryForObject("SELECT count(*) FROM delivery_order",Integer.class)).isEqualTo(before);

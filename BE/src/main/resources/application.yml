@@ -42,7 +42,7 @@ skylane:
     daily-messages: 100
     daily-tokens: 1000000
     max-output-tokens: 1024
-    max-rounds: 5
+    max-rounds: 6
     action-ttl-minutes: 10
   recommendation:
     weather-enabled: ${RECOMMENDATION_WEATHER_ENABLED:true}

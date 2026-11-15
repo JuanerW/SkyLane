@@ -76,7 +76,7 @@ class RecommendationDatabaseTest {
         return jdbc.queryForObject("SELECT count(*) FROM recommendation WHERE quote_id = ?", Integer.class, quote);
     }
     @Test void migratesAndSeedsTheRealDatabase() {
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE success", Integer.class)).isEqualTo(4);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM station", Integer.class)).isEqualTo(3);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM device", Integer.class)).isEqualTo(15);
     }
@@ -104,6 +104,18 @@ class RecommendationDatabaseTest {
         mvc.perform(post(endpoint(q)).header("Authorization", token(bob)))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("QUOTE_NOT_FOUND"));
         assertThat(count(q)).isEqualTo(1);
+    }
+    @Test void changingPreferenceReusesTheQuoteWithoutOverwritingAnotherPreference() throws Exception {
+        UUID q = quote();
+        var price = service.recommend(alice, q);
+        var speed = service.recommend(alice, q, RecommendationRules.Preference.SPEED);
+        assertThat(price.factors()).containsEntry("preference", "price");
+        assertThat(speed.factors()).containsEntry("preference", "speed");
+        assertThat(mapper.<JsonNode>valueToTree(service.recommend(alice, q, RecommendationRules.Preference.PRICE)))
+                .isEqualTo(mapper.<JsonNode>valueToTree(price));
+        assertThat(mapper.<JsonNode>valueToTree(service.recommend(alice, q, RecommendationRules.Preference.SPEED)))
+                .isEqualTo(mapper.<JsonNode>valueToTree(speed));
+        assertThat(count(q)).isEqualTo(2);
     }
     @Test void requiresLoginAndHidesUnknownQuotes() throws Exception {
         UUID q = quote();
